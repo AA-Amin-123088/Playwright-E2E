@@ -7,7 +7,6 @@ test.describe('Playwright Session Example', () => {
     await page.fill('[data-test="username"]', 'standard_user');
     await page.fill('[data-test="password"]', 'secret_sauce');
     await page.click('[data-test="login-button"]');
-    await page.waitForURL(/inventory.html/);
     await page.context().storageState({ path: 'auth.json' });
     await delay(2000);
   });

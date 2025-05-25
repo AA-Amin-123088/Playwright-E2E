@@ -8,6 +8,9 @@ test.describe('Sauce Demo Tests with Session', () => {
   test.beforeEach(async ({ page }) => {
     await page.goto('https://opensource-demo.orangehrmlive.com/web/index.php/dashboard/index'); // Already logged in
   });
+  test.afterEach(async ({page}) => {
+    await page.close();
+  });
 
   test('Test Case 1: Verify Feature Items', async ({ page }) => {
     await page.locator("//span[normalize-space()='My Info']").click();
