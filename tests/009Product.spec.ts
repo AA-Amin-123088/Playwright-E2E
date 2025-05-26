@@ -1,14 +1,14 @@
 import { test,expect } from '@playwright/test';
 const delay = (ms: number | undefined) => new Promise(resolve => setTimeout(resolve, ms));
+
 test.describe('Playwright Session Example', () => {
 
   test.beforeEach(async( {page}) => {
-    await page.goto('https://www.saucedemo.com/');
-    await page.fill('[data-test="username"]', 'standard_user');
-    await page.fill('[data-test="password"]', 'secret_sauce');
-    await page.click('[data-test="login-button"]');
-    await page.context().storageState({ path: 'auth.json' });
+    await page.goto("https://www.saucedemo.com/inventory.html");
     await delay(2000);
+  });
+  test.afterEach(async ({page}) => {
+    await page.close();
   });
 
   test('Test Case 1: Verify Feature Items', async ({ page }) => {
