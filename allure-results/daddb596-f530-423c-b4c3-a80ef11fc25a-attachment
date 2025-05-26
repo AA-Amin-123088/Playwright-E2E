@@ -1,0 +1,52 @@
+# Instructions
+
+- Following Playwright test failed.
+- Explain why, be concise, respect Playwright best practices.
+- Provide a snippet of code with the fix, if possible.
+
+# Test info
+
+- Name: Sauce Demo Tests with Session >> Test Case 2: Scroll to Bottom
+- Location: D:\PlayrightE2E\tests\010Product.spec.ts:20:7
+
+# Error details
+
+```
+Error: locator.click: Target page, context or browser has been closed
+Call log:
+  - waiting for locator('//span[normalize-space()=\'Maintenance\']')
+
+    at D:\PlayrightE2E\tests\010Product.spec.ts:21:67
+```
+
+# Test source
+
+```ts
+   1 | // tests/sauce-demo.spec.ts
+   2 | import { test, expect } from '@playwright/test';
+   3 |
+   4 | const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+   5 |
+   6 | test.describe('Sauce Demo Tests with Session', () => {
+   7 |
+   8 |   test.beforeEach(async ({ page }) => {
+   9 |     await page.goto('https://opensource-demo.orangehrmlive.com/web/index.php/dashboard/index'); // Already logged in
+  10 |   });
+  11 |   test.afterEach(async ({page}) => {
+  12 |     await page.close();
+  13 |   });
+  14 |
+  15 |   test('Test Case 1: Verify Feature Items', async ({ page }) => {
+  16 |     await page.locator("//span[normalize-space()='My Info']").click();
+  17 |     await delay(2000);
+  18 |   });
+  19 |
+  20 |   test('Test Case 2: Scroll to Bottom', async ({ page }) => {
+> 21 |     await page.locator("//span[normalize-space()='Maintenance']").click();
+     |                                                                   ^ Error: locator.click: Target page, context or browser has been closed
+  22 |     await delay(2000);
+  23 |   });
+  24 |
+  25 | });
+  26 |
+```
