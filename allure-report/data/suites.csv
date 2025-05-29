@@ -1,0 +1,3 @@
+"DESCRIPTION","DURATION IN MS","NAME","PARENT SUITE","START TIME","STATUS","STOP TIME","SUB SUITE","SUITE","TEST CLASS","TEST METHOD"
+"","7944","Test Case 1: Verify Feature Items","chromium","Thu May 29 22:28:20 BDT 2025","passed","Thu May 29 22:28:28 BDT 2025","Sauce Demo Tests with Session","010Product.spec.ts","",""
+"","8100","Test Case 2: Scroll to Bottom","chromium","Thu May 29 22:28:28 BDT 2025","passed","Thu May 29 22:28:36 BDT 2025","Sauce Demo Tests with Session","010Product.spec.ts","",""
