@@ -1,0 +1,58 @@
+# Instructions
+
+- Following Playwright test failed.
+- Explain why, be concise, respect Playwright best practices.
+- Provide a snippet of code with the fix, if possible.
+
+# Test info
+
+- Name: Sauce Demo Tests with Session >> Test Case 1: Verify Feature Items
+- Location: D:\PlayrightE2E\tests\011Product.spec.ts:19:7
+
+# Error details
+
+```
+Error: locator.click: Target page, context or browser has been closed
+Call log:
+  - waiting for locator('//span[normalize-space()=\'My Info\']')
+
+    at D:\PlayrightE2E\tests\011Product.spec.ts:21:63
+```
+
+# Test source
+
+```ts
+   1 | // tests/sauce-demo.spec.ts
+   2 | import { test, expect } from '@playwright/test';
+   3 |
+   4 |
+   5 | const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+   6 |
+   7 | test.describe('Sauce Demo Tests with Session', () => {
+   8 |
+   9 |   test.beforeAll(async ({ page }) => {
+  10 |
+  11 |   await page.goto('https://opensource-demo.orangehrmlive.com/web/index.php/auth/login');
+  12 |   await page.fill("//input[@placeholder='Username']", 'Admin');
+  13 |   await page.fill("//input[@placeholder='Password']", 'admin123');
+  14 |   await page.click("//button[normalize-space()='Login']");
+  15 |   await page.context().storageState({ path: 'login_auth.json' });
+  16 |     
+  17 |   });
+  18 |
+  19 |   test('Test Case 1: Verify Feature Items', async ({ page }) => {
+  20 |     await page.goto('https://opensource-demo.orangehrmlive.com/web/index.php/dashboard/index'); // Already logged
+> 21 |     await page.locator("//span[normalize-space()='My Info']").click();
+     |                                                               ^ Error: locator.click: Target page, context or browser has been closed
+  22 |     await delay(2000);
+  23 |   });
+  24 |
+  25 |   test('Test Case 2: Scroll to Bottom', async ({ page }) => {
+  26 |     await page.goto('https://opensource-demo.orangehrmlive.com/web/index.php/dashboard/index'); // Already logged
+  27 |     await page.locator("//span[normalize-space()='Maintenance']").click();
+  28 |     await delay(2000);
+  29 |   });
+  30 |
+  31 | });
+  32 |
+```

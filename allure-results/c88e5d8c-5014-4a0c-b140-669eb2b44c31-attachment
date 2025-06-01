@@ -1,0 +1,54 @@
+# Instructions
+
+- Following Playwright test failed.
+- Explain why, be concise, respect Playwright best practices.
+- Provide a snippet of code with the fix, if possible.
+
+# Test info
+
+- Name: Playwright Session Example >> Test Case 1: Verify Feature Items
+- Location: D:\PlayrightE2E\tests\009Product.spec.ts:14:7
+
+# Error details
+
+```
+Error: expect(received).toBe(expected) // Object.is equality
+
+Expected: true
+Received: false
+    at D:\PlayrightE2E\tests\009Product.spec.ts:16:23
+```
+
+# Test source
+
+```ts
+   1 | import { test,expect } from '@playwright/test';
+   2 | const delay = (ms: number | undefined) => new Promise(resolve => setTimeout(resolve, ms));
+   3 |
+   4 | test.describe('Playwright Session Example', () => {
+   5 |
+   6 |   test.beforeEach(async( {page}) => {
+   7 |     await page.goto("https://www.saucedemo.com/inventory.html");
+   8 |     await delay(2000);
+   9 |   });
+  10 |   test.afterEach(async ({page}) => {
+  11 |     await page.close();
+  12 |   });
+  13 |
+  14 |   test('Test Case 1: Verify Feature Items', async ({ page }) => {
+  15 |     const isVisible = await page.locator("xpath=//div[normalize-space()='Sauce Labs Backpack']").isVisible();
+> 16 |     expect(isVisible).toBe(true);
+     |                       ^ Error: expect(received).toBe(expected) // Object.is equality
+  17 |     await delay(2000);
+  18 |   });
+  19 |   
+  20 |   test('Test Case 2: Scroll to Bottom', async ({ page }) => {
+  21 |     const backpack = page.locator("xpath=//div[normalize-space()='Sauce Labs Backpack']");
+  22 |     await backpack.scrollIntoViewIfNeeded();
+  23 |     await backpack.click();
+  24 |     await delay(2000);
+  25 |   });
+  26 |
+  27 | });
+  28 |
+```
