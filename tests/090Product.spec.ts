@@ -14,7 +14,7 @@ test.describe('Sauce Demo Tests with Session', () => {
 
   test('Test Case 1: Verify Feature Items', async ({ page }) => {
     await page.locator("//span[normalize-space()='My Info']").click();
-    await delay(2000);
+    await delay(5000);
   });
 
   test('Test Case 2: Scroll to Bottom', async ({ page }) => {
@@ -23,3 +23,4 @@ test.describe('Sauce Demo Tests with Session', () => {
   });
 
 });
+// update
