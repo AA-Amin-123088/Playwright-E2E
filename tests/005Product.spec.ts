@@ -59,3 +59,12 @@ test.describe('API Testing with Playwright', () => {
     await apiContext.dispose();
   });
 });
+
+
+test('API Get Request', async({request}) => {
+  const response=await request.get('https://reqres.in/api/users/2');
+  // expect(response.status()).toBe(200);
+  // const text=await response.text();
+  // expect(text).toContain('John')
+  console.log(await response.json());
+});
