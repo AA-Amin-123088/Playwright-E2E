@@ -62,10 +62,6 @@ import { faker } from '@faker-js/faker';
 //   console.log("Unlocking account...");
 // }
 
-
-
-
-
 const test_data=JSON.parse(JSON.stringify(require("../testdata/testdata.json")));
 
 
