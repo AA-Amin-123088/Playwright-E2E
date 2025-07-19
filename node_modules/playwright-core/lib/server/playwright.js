@@ -35,7 +35,7 @@ var import_instrumentation = require("./instrumentation");
 var import_webkit = require("./webkit/webkit");
 class Playwright extends import_instrumentation.SdkObject {
   constructor(options) {
-    super({ attribution: {}, instrumentation: (0, import_instrumentation.createInstrumentation)() }, void 0, "Playwright");
+    super((0, import_instrumentation.createRootSdkObject)(), void 0, "Playwright");
     this._allPages = /* @__PURE__ */ new Set();
     this._allBrowsers = /* @__PURE__ */ new Set();
     this.options = options;
@@ -50,8 +50,8 @@ class Playwright extends import_instrumentation.SdkObject {
       }
     }, null);
     this.chromium = new import_chromium.Chromium(this);
-    this.bidiChromium = new import_bidiChromium.BidiChromium(this);
-    this.bidiFirefox = new import_bidiFirefox.BidiFirefox(this);
+    this._bidiChromium = new import_bidiChromium.BidiChromium(this);
+    this._bidiFirefox = new import_bidiFirefox.BidiFirefox(this);
     this.firefox = new import_firefox.Firefox(this);
     this.webkit = new import_webkit.WebKit(this);
     this.electron = new import_electron.Electron(this);

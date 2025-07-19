@@ -332,7 +332,7 @@ class BidiPage {
   }
   async takeScreenshot(progress, format, documentRect, viewportRect, quality, fitsViewport, scale) {
     const rect = documentRect || viewportRect;
-    const { data } = await this._session.send("browsingContext.captureScreenshot", {
+    const { data } = await progress.race(this._session.send("browsingContext.captureScreenshot", {
       context: this._session.sessionId,
       format: {
         type: `image/${format === "png" ? "png" : "jpeg"}`,
@@ -343,7 +343,7 @@ class BidiPage {
         type: "box",
         ...rect
       }
-    });
+    }));
     return Buffer.from(data, "base64");
   }
   async getContentFrame(handle) {
@@ -458,7 +458,7 @@ class BidiPage {
   }
   async inputActionEpilogue() {
   }
-  async resetForReuse() {
+  async resetForReuse(progress) {
   }
   async pdf(options) {
     return this._pdf.generate(options);

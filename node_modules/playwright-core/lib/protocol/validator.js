@@ -141,7 +141,9 @@ import_validatorPrimitives.scheme.SetNetworkCookie = (0, import_validatorPrimiti
   expires: (0, import_validatorPrimitives.tOptional)(import_validatorPrimitives.tNumber),
   httpOnly: (0, import_validatorPrimitives.tOptional)(import_validatorPrimitives.tBoolean),
   secure: (0, import_validatorPrimitives.tOptional)(import_validatorPrimitives.tBoolean),
-  sameSite: (0, import_validatorPrimitives.tOptional)((0, import_validatorPrimitives.tEnum)(["Strict", "Lax", "None"]))
+  sameSite: (0, import_validatorPrimitives.tOptional)((0, import_validatorPrimitives.tEnum)(["Strict", "Lax", "None"])),
+  partitionKey: (0, import_validatorPrimitives.tOptional)(import_validatorPrimitives.tString),
+  _crHasCrossSiteAncestor: (0, import_validatorPrimitives.tOptional)(import_validatorPrimitives.tBoolean)
 });
 import_validatorPrimitives.scheme.NetworkCookie = (0, import_validatorPrimitives.tObject)({
   name: import_validatorPrimitives.tString,
@@ -151,7 +153,9 @@ import_validatorPrimitives.scheme.NetworkCookie = (0, import_validatorPrimitives
   expires: import_validatorPrimitives.tNumber,
   httpOnly: import_validatorPrimitives.tBoolean,
   secure: import_validatorPrimitives.tBoolean,
-  sameSite: (0, import_validatorPrimitives.tEnum)(["Strict", "Lax", "None"])
+  sameSite: (0, import_validatorPrimitives.tEnum)(["Strict", "Lax", "None"]),
+  partitionKey: (0, import_validatorPrimitives.tOptional)(import_validatorPrimitives.tString),
+  _crHasCrossSiteAncestor: (0, import_validatorPrimitives.tOptional)(import_validatorPrimitives.tBoolean)
 });
 import_validatorPrimitives.scheme.NameValue = (0, import_validatorPrimitives.tObject)({
   name: import_validatorPrimitives.tString,
@@ -378,8 +382,8 @@ import_validatorPrimitives.scheme.PlaywrightInitializer = (0, import_validatorPr
   chromium: (0, import_validatorPrimitives.tChannel)(["BrowserType"]),
   firefox: (0, import_validatorPrimitives.tChannel)(["BrowserType"]),
   webkit: (0, import_validatorPrimitives.tChannel)(["BrowserType"]),
-  bidiChromium: (0, import_validatorPrimitives.tChannel)(["BrowserType"]),
-  bidiFirefox: (0, import_validatorPrimitives.tChannel)(["BrowserType"]),
+  _bidiChromium: (0, import_validatorPrimitives.tChannel)(["BrowserType"]),
+  _bidiFirefox: (0, import_validatorPrimitives.tChannel)(["BrowserType"]),
   android: (0, import_validatorPrimitives.tChannel)(["Android"]),
   electron: (0, import_validatorPrimitives.tChannel)(["Electron"]),
   utils: (0, import_validatorPrimitives.tOptional)((0, import_validatorPrimitives.tChannel)(["LocalUtils"])),
@@ -819,10 +823,10 @@ import_validatorPrimitives.scheme.BrowserNewContextForReuseParams = (0, import_v
 import_validatorPrimitives.scheme.BrowserNewContextForReuseResult = (0, import_validatorPrimitives.tObject)({
   context: (0, import_validatorPrimitives.tChannel)(["BrowserContext"])
 });
-import_validatorPrimitives.scheme.BrowserStopPendingOperationsParams = (0, import_validatorPrimitives.tObject)({
+import_validatorPrimitives.scheme.BrowserDisconnectFromReusedContextParams = (0, import_validatorPrimitives.tObject)({
   reason: import_validatorPrimitives.tString
 });
-import_validatorPrimitives.scheme.BrowserStopPendingOperationsResult = (0, import_validatorPrimitives.tOptional)((0, import_validatorPrimitives.tObject)({}));
+import_validatorPrimitives.scheme.BrowserDisconnectFromReusedContextResult = (0, import_validatorPrimitives.tOptional)((0, import_validatorPrimitives.tObject)({}));
 import_validatorPrimitives.scheme.BrowserNewBrowserCDPSessionParams = (0, import_validatorPrimitives.tOptional)((0, import_validatorPrimitives.tObject)({}));
 import_validatorPrimitives.scheme.BrowserNewBrowserCDPSessionResult = (0, import_validatorPrimitives.tObject)({
   session: (0, import_validatorPrimitives.tChannel)(["CDPSession"])
@@ -981,6 +985,11 @@ import_validatorPrimitives.scheme.BrowserContextResponseEvent = (0, import_valid
   response: (0, import_validatorPrimitives.tChannel)(["Response"]),
   page: (0, import_validatorPrimitives.tOptional)((0, import_validatorPrimitives.tChannel)(["Page"]))
 });
+import_validatorPrimitives.scheme.BrowserContextRecorderEventEvent = (0, import_validatorPrimitives.tObject)({
+  event: (0, import_validatorPrimitives.tEnum)(["actionAdded", "actionUpdated", "signalAdded"]),
+  data: import_validatorPrimitives.tAny,
+  page: (0, import_validatorPrimitives.tChannel)(["Page"])
+});
 import_validatorPrimitives.scheme.BrowserContextAddCookiesParams = (0, import_validatorPrimitives.tObject)({
   cookies: (0, import_validatorPrimitives.tArray)((0, import_validatorPrimitives.tType)("SetNetworkCookie"))
 });
@@ -1087,6 +1096,7 @@ import_validatorPrimitives.scheme.BrowserContextPauseResult = (0, import_validat
 import_validatorPrimitives.scheme.BrowserContextEnableRecorderParams = (0, import_validatorPrimitives.tObject)({
   language: (0, import_validatorPrimitives.tOptional)(import_validatorPrimitives.tString),
   mode: (0, import_validatorPrimitives.tOptional)((0, import_validatorPrimitives.tEnum)(["inspecting", "recording"])),
+  recorderMode: (0, import_validatorPrimitives.tOptional)((0, import_validatorPrimitives.tEnum)(["default", "api"])),
   pauseOnNextStatement: (0, import_validatorPrimitives.tOptional)(import_validatorPrimitives.tBoolean),
   testIdAttributeName: (0, import_validatorPrimitives.tOptional)(import_validatorPrimitives.tString),
   launchOptions: (0, import_validatorPrimitives.tOptional)(import_validatorPrimitives.tAny),
@@ -1098,6 +1108,8 @@ import_validatorPrimitives.scheme.BrowserContextEnableRecorderParams = (0, impor
   omitCallTracking: (0, import_validatorPrimitives.tOptional)(import_validatorPrimitives.tBoolean)
 });
 import_validatorPrimitives.scheme.BrowserContextEnableRecorderResult = (0, import_validatorPrimitives.tOptional)((0, import_validatorPrimitives.tObject)({}));
+import_validatorPrimitives.scheme.BrowserContextDisableRecorderParams = (0, import_validatorPrimitives.tOptional)((0, import_validatorPrimitives.tObject)({}));
+import_validatorPrimitives.scheme.BrowserContextDisableRecorderResult = (0, import_validatorPrimitives.tOptional)((0, import_validatorPrimitives.tObject)({}));
 import_validatorPrimitives.scheme.BrowserContextNewCDPSessionParams = (0, import_validatorPrimitives.tObject)({
   page: (0, import_validatorPrimitives.tOptional)((0, import_validatorPrimitives.tChannel)(["Page"])),
   frame: (0, import_validatorPrimitives.tOptional)((0, import_validatorPrimitives.tChannel)(["Frame"]))
@@ -1653,6 +1665,12 @@ import_validatorPrimitives.scheme.FrameFrameElementParams = (0, import_validator
 import_validatorPrimitives.scheme.FrameFrameElementResult = (0, import_validatorPrimitives.tObject)({
   element: (0, import_validatorPrimitives.tChannel)(["ElementHandle"])
 });
+import_validatorPrimitives.scheme.FrameGenerateLocatorStringParams = (0, import_validatorPrimitives.tObject)({
+  selector: import_validatorPrimitives.tString
+});
+import_validatorPrimitives.scheme.FrameGenerateLocatorStringResult = (0, import_validatorPrimitives.tObject)({
+  value: (0, import_validatorPrimitives.tOptional)(import_validatorPrimitives.tString)
+});
 import_validatorPrimitives.scheme.FrameHighlightParams = (0, import_validatorPrimitives.tObject)({
   selector: import_validatorPrimitives.tString
 });
@@ -1860,7 +1878,7 @@ import_validatorPrimitives.scheme.FrameUncheckParams = (0, import_validatorPrimi
 });
 import_validatorPrimitives.scheme.FrameUncheckResult = (0, import_validatorPrimitives.tOptional)((0, import_validatorPrimitives.tObject)({}));
 import_validatorPrimitives.scheme.FrameWaitForTimeoutParams = (0, import_validatorPrimitives.tObject)({
-  timeout: import_validatorPrimitives.tNumber
+  waitTimeout: import_validatorPrimitives.tNumber
 });
 import_validatorPrimitives.scheme.FrameWaitForTimeoutResult = (0, import_validatorPrimitives.tOptional)((0, import_validatorPrimitives.tObject)({}));
 import_validatorPrimitives.scheme.FrameWaitForFunctionParams = (0, import_validatorPrimitives.tObject)({
@@ -1884,7 +1902,7 @@ import_validatorPrimitives.scheme.FrameWaitForSelectorResult = (0, import_valida
   element: (0, import_validatorPrimitives.tOptional)((0, import_validatorPrimitives.tChannel)(["ElementHandle"]))
 });
 import_validatorPrimitives.scheme.FrameExpectParams = (0, import_validatorPrimitives.tObject)({
-  selector: import_validatorPrimitives.tString,
+  selector: (0, import_validatorPrimitives.tOptional)(import_validatorPrimitives.tString),
   expression: import_validatorPrimitives.tString,
   expressionArg: (0, import_validatorPrimitives.tOptional)(import_validatorPrimitives.tAny),
   expectedText: (0, import_validatorPrimitives.tOptional)((0, import_validatorPrimitives.tArray)((0, import_validatorPrimitives.tType)("ExpectedTextValue"))),
@@ -2046,10 +2064,6 @@ import_validatorPrimitives.scheme.ElementHandleFillParams = (0, import_validator
 import_validatorPrimitives.scheme.ElementHandleFillResult = (0, import_validatorPrimitives.tOptional)((0, import_validatorPrimitives.tObject)({}));
 import_validatorPrimitives.scheme.ElementHandleFocusParams = (0, import_validatorPrimitives.tOptional)((0, import_validatorPrimitives.tObject)({}));
 import_validatorPrimitives.scheme.ElementHandleFocusResult = (0, import_validatorPrimitives.tOptional)((0, import_validatorPrimitives.tObject)({}));
-import_validatorPrimitives.scheme.ElementHandleGenerateLocatorStringParams = (0, import_validatorPrimitives.tOptional)((0, import_validatorPrimitives.tObject)({}));
-import_validatorPrimitives.scheme.ElementHandleGenerateLocatorStringResult = (0, import_validatorPrimitives.tObject)({
-  value: (0, import_validatorPrimitives.tOptional)(import_validatorPrimitives.tString)
-});
 import_validatorPrimitives.scheme.ElementHandleGetAttributeParams = (0, import_validatorPrimitives.tObject)({
   name: import_validatorPrimitives.tString
 });

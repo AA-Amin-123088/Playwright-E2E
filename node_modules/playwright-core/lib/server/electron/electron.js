@@ -50,7 +50,6 @@ var import_helper = require("../helper");
 var import_instrumentation = require("../instrumentation");
 var js = __toESM(require("../javascript"));
 var import_processLauncher = require("../utils/processLauncher");
-var import_progress = require("../progress");
 var import_transport = require("../transport");
 const ARTIFACTS_FOLDER = import_path.default.join(import_os.default.tmpdir(), "playwright-artifacts-");
 class ElectronApplication extends import_instrumentation.SdkObject {
@@ -126,126 +125,122 @@ class ElectronApplication extends import_instrumentation.SdkObject {
 class Electron extends import_instrumentation.SdkObject {
   constructor(playwright) {
     super(playwright, "electron");
+    this.logName = "browser";
   }
-  async launch(options) {
-    const {
-      args = []
-    } = options;
-    const controller = new import_progress.ProgressController((0, import_instrumentation.serverSideCallMetadata)(), this);
-    controller.setLogName("browser");
-    return controller.run(async (progress) => {
-      let app = void 0;
-      let electronArguments = ["--inspect=0", "--remote-debugging-port=0", ...args];
-      if (import_os.default.platform() === "linux") {
-        const runningAsRoot = process.geteuid && process.geteuid() === 0;
-        if (runningAsRoot && electronArguments.indexOf("--no-sandbox") === -1)
-          electronArguments.unshift("--no-sandbox");
-      }
-      const artifactsDir = await import_fs.default.promises.mkdtemp(ARTIFACTS_FOLDER);
-      const browserLogsCollector = new import_debugLogger.RecentLogsCollector();
-      const env = options.env ? (0, import_processLauncher.envArrayToObject)(options.env) : process.env;
-      let command;
-      if (options.executablePath) {
-        command = options.executablePath;
-      } else {
-        try {
-          command = require("electron/index.js");
-        } catch (error) {
-          if (error?.code === "MODULE_NOT_FOUND") {
-            throw new Error("\n" + (0, import_ascii.wrapInASCIIBox)([
-              "Electron executablePath not found!",
-              "Please install it using `npm install -D electron` or set the executablePath to your Electron executable."
-            ].join("\n"), 1));
-          }
-          throw error;
+  async launch(progress, options) {
+    let app = void 0;
+    let electronArguments = ["--inspect=0", "--remote-debugging-port=0", ...options.args || []];
+    if (import_os.default.platform() === "linux") {
+      const runningAsRoot = process.geteuid && process.geteuid() === 0;
+      if (runningAsRoot && electronArguments.indexOf("--no-sandbox") === -1)
+        electronArguments.unshift("--no-sandbox");
+    }
+    const artifactsDir = await progress.race(import_fs.default.promises.mkdtemp(ARTIFACTS_FOLDER));
+    progress.cleanupWhenAborted(() => (0, import_utils.removeFolders)([artifactsDir]));
+    const browserLogsCollector = new import_debugLogger.RecentLogsCollector();
+    const env = options.env ? (0, import_processLauncher.envArrayToObject)(options.env) : process.env;
+    let command;
+    if (options.executablePath) {
+      command = options.executablePath;
+    } else {
+      try {
+        command = require("electron/index.js");
+      } catch (error) {
+        if (error?.code === "MODULE_NOT_FOUND") {
+          throw new Error("\n" + (0, import_ascii.wrapInASCIIBox)([
+            "Electron executablePath not found!",
+            "Please install it using `npm install -D electron` or set the executablePath to your Electron executable."
+          ].join("\n"), 1));
         }
-        electronArguments.unshift("-r", require.resolve("./loader"));
+        throw error;
       }
-      let shell = false;
-      if (process.platform === "win32") {
-        shell = true;
-        command = `"${command}"`;
-        electronArguments = electronArguments.map((arg) => `"${arg}"`);
-      }
-      delete env.NODE_OPTIONS;
-      const { launchedProcess, gracefullyClose, kill } = await (0, import_processLauncher.launchProcess)({
-        command,
-        args: electronArguments,
-        env,
-        log: (message) => {
-          progress.log(message);
-          browserLogsCollector.log(message);
-        },
-        shell,
-        stdio: "pipe",
-        cwd: options.cwd,
-        tempDirectories: [artifactsDir],
-        attemptToGracefullyClose: () => app.close(),
-        handleSIGINT: true,
-        handleSIGTERM: true,
-        handleSIGHUP: true,
-        onExit: () => app?.emit(ElectronApplication.Events.Close)
-      });
-      const waitForXserverError = new Promise(async (resolve, reject) => {
-        waitForLine(progress, launchedProcess, /Unable to open X display/).then(() => reject(new Error([
-          "Unable to open X display!",
-          `================================`,
-          "Most likely this is because there is no X server available.",
-          "Use 'xvfb-run' on Linux to launch your tests with an emulated display server.",
-          "For example: 'xvfb-run npm run test:e2e'",
-          `================================`,
-          progress.metadata.log
-        ].join("\n")))).catch(() => {
-        });
-      });
-      const nodeMatchPromise = waitForLine(progress, launchedProcess, /^Debugger listening on (ws:\/\/.*)$/);
-      const chromeMatchPromise = waitForLine(progress, launchedProcess, /^DevTools listening on (ws:\/\/.*)$/);
-      const debuggerDisconnectPromise = waitForLine(progress, launchedProcess, /Waiting for the debugger to disconnect\.\.\./);
-      const nodeMatch = await nodeMatchPromise;
-      const nodeTransport = await import_transport.WebSocketTransport.connect(progress, nodeMatch[1]);
-      const nodeConnection = new import_crConnection.CRConnection(nodeTransport, import_helper.helper.debugProtocolLogger(), browserLogsCollector);
-      debuggerDisconnectPromise.then(() => {
-        nodeTransport.close();
-      }).catch(() => {
-      });
-      const chromeMatch = await Promise.race([
-        chromeMatchPromise,
-        waitForXserverError
-      ]);
-      const chromeTransport = await import_transport.WebSocketTransport.connect(progress, chromeMatch[1]);
-      const browserProcess = {
-        onclose: void 0,
-        process: launchedProcess,
-        close: gracefullyClose,
-        kill
-      };
-      const contextOptions = {
-        ...options,
-        noDefaultViewport: true
-      };
-      const browserOptions = {
-        name: "electron",
-        isChromium: true,
-        headful: true,
-        persistent: contextOptions,
-        browserProcess,
-        protocolLogger: import_helper.helper.debugProtocolLogger(),
-        browserLogsCollector,
-        artifactsDir,
-        downloadsPath: artifactsDir,
-        tracesDir: options.tracesDir || artifactsDir,
-        originalLaunchOptions: { timeout: options.timeout }
-      };
-      (0, import_browserContext.validateBrowserContextOptions)(contextOptions, browserOptions);
-      const browser = await import_crBrowser.CRBrowser.connect(this.attribution.playwright, chromeTransport, browserOptions);
-      app = new ElectronApplication(this, browser, nodeConnection, launchedProcess);
-      await app.initialize();
-      return app;
-    }, options.timeout);
+      electronArguments.unshift("-r", require.resolve("./loader"));
+    }
+    let shell = false;
+    if (process.platform === "win32") {
+      shell = true;
+      command = `"${command}"`;
+      electronArguments = electronArguments.map((arg) => `"${arg}"`);
+    }
+    delete env.NODE_OPTIONS;
+    const { launchedProcess, gracefullyClose, kill } = await (0, import_processLauncher.launchProcess)({
+      command,
+      args: electronArguments,
+      env,
+      log: (message) => {
+        progress.log(message);
+        browserLogsCollector.log(message);
+      },
+      shell,
+      stdio: "pipe",
+      cwd: options.cwd,
+      tempDirectories: [artifactsDir],
+      attemptToGracefullyClose: () => app.close(),
+      handleSIGINT: true,
+      handleSIGTERM: true,
+      handleSIGHUP: true,
+      onExit: () => app?.emit(ElectronApplication.Events.Close)
+    });
+    const waitForXserverError = waitForLine(progress, launchedProcess, /Unable to open X display/).then(() => {
+      throw new Error([
+        "Unable to open X display!",
+        `================================`,
+        "Most likely this is because there is no X server available.",
+        "Use 'xvfb-run' on Linux to launch your tests with an emulated display server.",
+        "For example: 'xvfb-run npm run test:e2e'",
+        `================================`,
+        progress.metadata.log
+      ].join("\n"));
+    });
+    const nodeMatchPromise = waitForLine(progress, launchedProcess, /^Debugger listening on (ws:\/\/.*)$/);
+    const chromeMatchPromise = waitForLine(progress, launchedProcess, /^DevTools listening on (ws:\/\/.*)$/);
+    const debuggerDisconnectPromise = waitForLine(progress, launchedProcess, /Waiting for the debugger to disconnect\.\.\./);
+    const nodeMatch = await nodeMatchPromise;
+    const nodeTransport = await import_transport.WebSocketTransport.connect(progress, nodeMatch[1]);
+    progress.cleanupWhenAborted(() => nodeTransport.close());
+    const nodeConnection = new import_crConnection.CRConnection(this, nodeTransport, import_helper.helper.debugProtocolLogger(), browserLogsCollector);
+    debuggerDisconnectPromise.then(() => {
+      nodeTransport.close();
+    }).catch(() => {
+    });
+    const chromeMatch = await Promise.race([
+      chromeMatchPromise,
+      waitForXserverError
+    ]);
+    const chromeTransport = await import_transport.WebSocketTransport.connect(progress, chromeMatch[1]);
+    progress.cleanupWhenAborted(() => chromeTransport.close());
+    const browserProcess = {
+      onclose: void 0,
+      process: launchedProcess,
+      close: gracefullyClose,
+      kill
+    };
+    const contextOptions = {
+      ...options,
+      noDefaultViewport: true
+    };
+    const browserOptions = {
+      name: "electron",
+      isChromium: true,
+      headful: true,
+      persistent: contextOptions,
+      browserProcess,
+      protocolLogger: import_helper.helper.debugProtocolLogger(),
+      browserLogsCollector,
+      artifactsDir,
+      downloadsPath: artifactsDir,
+      tracesDir: options.tracesDir || artifactsDir,
+      originalLaunchOptions: {}
+    };
+    (0, import_browserContext.validateBrowserContextOptions)(contextOptions, browserOptions);
+    const browser = await progress.race(import_crBrowser.CRBrowser.connect(this.attribution.playwright, chromeTransport, browserOptions));
+    app = new ElectronApplication(this, browser, nodeConnection, launchedProcess);
+    await progress.race(app.initialize());
+    return app;
   }
 }
 function waitForLine(progress, process2, regex) {
-  return new Promise((resolve, reject) => {
+  return progress.race(new Promise((resolve, reject) => {
     const rl = readline.createInterface({ input: process2.stderr });
     const failError = new Error("Process failed to launch!");
     const listeners = [
@@ -266,7 +261,7 @@ function waitForLine(progress, process2, regex) {
     function cleanup() {
       import_eventsHelper.eventsHelper.removeEventListeners(listeners);
     }
-  });
+  }));
 }
 // Annotate the CommonJS export names for ESM import in node:
 0 && (module.exports = {

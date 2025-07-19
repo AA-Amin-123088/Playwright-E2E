@@ -38,6 +38,7 @@ var import_utils = require("../utils");
 var import_instrumentation = require("./instrumentation");
 var import_registry = require("./registry");
 var import_registry2 = require("./registry");
+var import_progress = require("./progress");
 async function launchApp(browserType, options) {
   const args = [...options.persistentContextOptions?.args ?? []];
   let channel = options.persistentContextOptions?.channel;
@@ -51,23 +52,22 @@ async function launchApp(browserType, options) {
     if (!channel && !options.persistentContextOptions?.executablePath)
       channel = (0, import_registry.findChromiumChannel)(options.sdkLanguage);
   }
-  const context = await browserType.launchPersistentContext((0, import_instrumentation.serverSideCallMetadata)(), "", {
+  const controller = new import_progress.ProgressController((0, import_instrumentation.serverSideCallMetadata)(), browserType);
+  const context = await controller.run((progress) => browserType.launchPersistentContext(progress, "", {
     ignoreDefaultArgs: ["--enable-automation"],
     ...options?.persistentContextOptions,
     channel,
     noDefaultViewport: options.persistentContextOptions?.noDefaultViewport ?? true,
     acceptDownloads: options?.persistentContextOptions?.acceptDownloads ?? ((0, import_utils.isUnderTest)() ? "accept" : "internal-browser-default"),
     colorScheme: options?.persistentContextOptions?.colorScheme ?? "no-override",
-    args,
-    timeout: 0
-    // Deliberately no timeout for our apps.
-  });
+    args
+  }), 0);
   const [page] = context.pages();
   if (browserType.name() === "chromium" && process.platform === "darwin") {
     context.on("page", async (newPage) => {
       if (newPage.mainFrame().url() === "chrome://new-tab-page/") {
         await page.bringToFront();
-        await newPage.close((0, import_instrumentation.serverSideCallMetadata)());
+        await newPage.close();
       }
     });
   }
@@ -86,24 +86,28 @@ async function syncLocalStorageWithSettings(page, appName) {
   if ((0, import_utils.isUnderTest)())
     return;
   const settingsFile = import_path.default.join(import_registry2.registryDirectory, ".settings", `${appName}.json`);
-  await page.exposeBinding("_saveSerializedSettings", false, (_, settings2) => {
-    import_fs.default.mkdirSync(import_path.default.dirname(settingsFile), { recursive: true });
-    import_fs.default.writeFileSync(settingsFile, settings2);
+  const controller = new import_progress.ProgressController((0, import_instrumentation.serverSideCallMetadata)(), page);
+  await controller.run(async (progress) => {
+    await page.exposeBinding(progress, "_saveSerializedSettings", false, (_, settings2) => {
+      import_fs.default.mkdirSync(import_path.default.dirname(settingsFile), { recursive: true });
+      import_fs.default.writeFileSync(settingsFile, settings2);
+    });
+    const settings = await import_fs.default.promises.readFile(settingsFile, "utf-8").catch(() => "{}");
+    await page.addInitScript(
+      progress,
+      `(${String((settings2) => {
+        if (location && location.protocol === "data:")
+          return;
+        if (window.top !== window)
+          return;
+        Object.entries(settings2).map(([k, v]) => localStorage[k] = v);
+        window.saveSettings = () => {
+          window._saveSerializedSettings(JSON.stringify({ ...localStorage }));
+        };
+      })})(${settings});
+    `
+    );
   });
-  const settings = await import_fs.default.promises.readFile(settingsFile, "utf-8").catch(() => "{}");
-  await page.addInitScript(
-    `(${String((settings2) => {
-      if (location && location.protocol === "data:")
-        return;
-      if (window.top !== window)
-        return;
-      Object.entries(settings2).map(([k, v]) => localStorage[k] = v);
-      window.saveSettings = () => {
-        window._saveSerializedSettings(JSON.stringify({ ...localStorage }));
-      };
-    })})(${settings});
-  `
-  );
 }
 // Annotate the CommonJS export names for ESM import in node:
 0 && (module.exports = {

@@ -261,9 +261,13 @@ class ClientCertificatesProxy {
       }
     }
   }
-  async listen() {
-    const port = await this._socksProxy.listen(0, "127.0.0.1");
-    return { server: `socks5://127.0.0.1:${port}` };
+  static async create(contextOptions) {
+    const proxy = new ClientCertificatesProxy(contextOptions);
+    await proxy._socksProxy.listen(0, "127.0.0.1");
+    return proxy;
+  }
+  proxySettings() {
+    return { server: `socks5://127.0.0.1:${this._socksProxy.port()}` };
   }
   async close() {
     await this._socksProxy.close();

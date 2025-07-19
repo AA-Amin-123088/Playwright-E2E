@@ -37,9 +37,10 @@ var import_browserType = require("../browserType");
 var import_bidiBrowser = require("./bidiBrowser");
 var import_bidiConnection = require("./bidiConnection");
 var import_chromiumSwitches = require("../chromium/chromiumSwitches");
+var import_chromium = require("../chromium/chromium");
 class BidiChromium extends import_browserType.BrowserType {
   constructor(parent) {
-    super(parent, "bidi");
+    super(parent, "_bidiChromium");
   }
   async connectToTransport(transport, options, browserLogsCollector) {
     const bidiTransport = await require("./bidiOverCdp").connectBidiOverCdp(transport);
@@ -73,7 +74,7 @@ class BidiChromium extends import_browserType.BrowserType {
     ].join("\n");
     return error;
   }
-  amendEnvironment(env, userDataDir, executable, browserArguments) {
+  amendEnvironment(env) {
     return env;
   }
   attemptToGracefullyCloseBrowser(transport) {
@@ -95,8 +96,8 @@ class BidiChromium extends import_browserType.BrowserType {
       chromeArguments.push("--no-startup-window");
     return chromeArguments;
   }
-  readyState(options) {
-    return new ChromiumReadyState();
+  async waitForReadyState(options, browserLogsCollector) {
+    return (0, import_chromium.waitForReadyState)({ ...options, cdpPort: 0 }, browserLogsCollector);
   }
   _innerDefaultArgs(options) {
     const { args = [] } = options;
@@ -129,12 +130,12 @@ class BidiChromium extends import_browserType.BrowserType {
     if (proxy) {
       const proxyURL = new URL(proxy.server);
       const isSocks = proxyURL.protocol === "socks5:";
-      if (isSocks && !this.attribution.playwright.options.socksProxyPort) {
+      if (isSocks && !options.socksProxyPort) {
         chromeArguments.push(`--host-resolver-rules="MAP * ~NOTFOUND , EXCLUDE ${proxyURL.hostname}"`);
       }
       chromeArguments.push(`--proxy-server=${proxy.server}`);
       const proxyBypassRules = [];
-      if (this.attribution.playwright.options.socksProxyPort)
+      if (options.socksProxyPort)
         proxyBypassRules.push("<-loopback>");
       if (proxy.bypass)
         proxyBypassRules.push(...proxy.bypass.split(",").map((t) => t.trim()).map((t) => t.startsWith(".") ? "*" + t : t));
@@ -145,16 +146,6 @@ class BidiChromium extends import_browserType.BrowserType {
     }
     chromeArguments.push(...args);
     return chromeArguments;
-  }
-}
-class ChromiumReadyState extends import_browserType.BrowserReadyState {
-  onBrowserOutput(message) {
-    if (message.includes("Failed to create a ProcessSingleton for your profile directory.")) {
-      this._wsEndpoint.reject(new Error("Failed to create a ProcessSingleton for your profile directory. This usually means that the profile is already in use by another instance of Chromium."));
-    }
-    const match = message.match(/DevTools listening on (.*)/);
-    if (match)
-      this._wsEndpoint.resolve(match[1]);
   }
 }
 const kBidiOverCdpWrapper = Symbol("kBidiConnectionWrapper");

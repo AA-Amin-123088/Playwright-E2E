@@ -55,7 +55,6 @@ function httpRequest(params, onResponse, onError) {
   };
   if (params.rejectUnauthorized !== void 0)
     options.rejectUnauthorized = params.rejectUnauthorized;
-  const timeout = params.timeout ?? NET_DEFAULT_TIMEOUT;
   const proxyURL = (0, import_utilsBundle.getProxyForUrl)(params.url);
   if (proxyURL) {
     const parsedProxyURL = import_url.default.parse(proxyURL);
@@ -73,33 +72,31 @@ function httpRequest(params, onResponse, onError) {
       options.rejectUnauthorized = false;
     }
   }
+  let cancelRequest;
   const requestCallback = (res) => {
     const statusCode = res.statusCode || 0;
     if (statusCode >= 300 && statusCode < 400 && res.headers.location) {
       request.destroy();
-      httpRequest({ ...params, url: new URL(res.headers.location, params.url).toString() }, onResponse, onError);
+      cancelRequest = httpRequest({ ...params, url: new URL(res.headers.location, params.url).toString() }, onResponse, onError).cancel;
     } else {
       onResponse(res);
     }
   };
   const request = options.protocol === "https:" ? import_https.default.request(options, requestCallback) : import_http.default.request(options, requestCallback);
   request.on("error", onError);
-  if (timeout !== void 0) {
-    const rejectOnTimeout = () => {
-      onError(new Error(`Request to ${params.url} timed out after ${timeout}ms`));
+  if (params.socketTimeout !== void 0) {
+    request.setTimeout(params.socketTimeout, () => {
+      onError(new Error(`Request to ${params.url} timed out after ${params.socketTimeout}ms`));
       request.abort();
-    };
-    if (timeout <= 0) {
-      rejectOnTimeout();
-      return;
-    }
-    request.setTimeout(timeout, rejectOnTimeout);
+    });
   }
+  cancelRequest = (e) => request.destroy(e);
   request.end(params.data);
+  return { cancel: (e) => cancelRequest(e) };
 }
-function fetchData(params, onError) {
-  return new Promise((resolve, reject) => {
-    httpRequest(params, async (response) => {
+function fetchData(progress, params, onError) {
+  const promise = new Promise((resolve, reject) => {
+    const { cancel } = httpRequest(params, async (response) => {
       if (response.statusCode !== 200) {
         const error = onError ? await onError(params, response) : new Error(`fetch failed: server returned code ${response.statusCode}. URL: ${params.url}`);
         reject(error);
@@ -110,7 +107,9 @@ function fetchData(params, onError) {
       response.on("error", (error) => reject(error));
       response.on("end", () => resolve(body));
     }, reject);
+    progress?.cleanupWhenAborted(cancel);
   });
+  return progress ? progress.race(promise) : promise;
 }
 function shouldBypassProxy(url2, bypass) {
   if (!bypass)

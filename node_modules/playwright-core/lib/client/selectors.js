@@ -30,6 +30,8 @@ class Selectors {
     this._platform = platform;
   }
   async register(name, script, options = {}) {
+    if (this._selectorEngines.some((engine) => engine.name === name))
+      throw new Error(`selectors.register: "${name}" selector engine has been already registered`);
     const source = await (0, import_clientHelper.evaluationScript)(this._platform, script, void 0, false);
     const selectorEngine = { ...options, name, source };
     for (const context of this._contextsForSelectors)

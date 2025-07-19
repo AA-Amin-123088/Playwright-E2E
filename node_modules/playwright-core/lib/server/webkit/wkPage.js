@@ -795,7 +795,7 @@ class WKPage {
     const omitDeviceScaleFactor = scale === "css";
     this.validateScreenshotDimension(rect.width, omitDeviceScaleFactor);
     this.validateScreenshotDimension(rect.height, omitDeviceScaleFactor);
-    const result = await this._session.send("Page.snapshotRect", { ...rect, coordinateSystem: documentRect ? "Page" : "Viewport", omitDeviceScaleFactor });
+    const result = await progress.race(this._session.send("Page.snapshotRect", { ...rect, coordinateSystem: documentRect ? "Page" : "Viewport", omitDeviceScaleFactor }));
     const prefix = "data:image/png;base64,";
     let buffer = Buffer.from(result.dataURL.substr(prefix.length), "base64");
     if (format === "jpeg")
@@ -907,7 +907,7 @@ class WKPage {
   }
   async inputActionEpilogue() {
   }
-  async resetForReuse() {
+  async resetForReuse(progress) {
   }
   async getFrameElement(frame) {
     const parent = frame.parentFrame();

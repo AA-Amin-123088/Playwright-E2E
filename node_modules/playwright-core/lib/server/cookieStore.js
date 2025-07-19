@@ -34,7 +34,7 @@ class Cookie {
   }
   // https://datatracker.ietf.org/doc/html/rfc6265#section-5.4
   matches(url) {
-    if (this._raw.secure && (url.protocol !== "https:" && url.hostname !== "localhost"))
+    if (this._raw.secure && (url.protocol !== "https:" && !(0, import_network.isLocalHostname)(url.hostname)))
       return false;
     if (!domainMatches(url.hostname, this._raw.domain))
       return false;

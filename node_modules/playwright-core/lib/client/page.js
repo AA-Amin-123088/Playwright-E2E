@@ -144,7 +144,7 @@ class Page extends import_channelOwner.ChannelOwner {
         this._routes.splice(index, 1);
       const handled = await routeHandler.handle(route);
       if (!this._routes.length)
-        this._wrapApiCall(() => this._updateInterceptionPatterns(), { internal: true }).catch(() => {
+        this._updateInterceptionPatterns().catch(() => {
         });
       if (handled)
         return;
@@ -301,7 +301,7 @@ class Page extends import_channelOwner.ChannelOwner {
     } finally {
       if (remove)
         this._locatorHandlers.delete(uid);
-      this._wrapApiCall(() => this._channel.resolveLocatorHandlerNoReply({ uid, remove }), { internal: true }).catch(() => {
+      this._channel.resolveLocatorHandlerNoReply({ uid, remove }).catch(() => {
       });
     }
   }
@@ -442,11 +442,11 @@ class Page extends import_channelOwner.ChannelOwner {
   }
   async _unrouteInternal(removed, remaining, behavior) {
     this._routes = remaining;
+    if (behavior && behavior !== "default") {
+      const promises = removed.map((routeHandler) => routeHandler.stop(behavior));
+      await Promise.all(promises);
+    }
     await this._updateInterceptionPatterns();
-    if (!behavior || behavior === "default")
-      return;
-    const promises = removed.map((routeHandler) => routeHandler.stop(behavior));
-    await Promise.all(promises);
   }
   async _updateInterceptionPatterns() {
     const patterns = import_network.RouteHandler.prepareInterceptionPatterns(this._routes);

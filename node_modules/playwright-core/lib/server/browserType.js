@@ -28,7 +28,6 @@ var __toESM = (mod, isNodeMode, target) => (target = mod != null ? __create(__ge
 var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
 var browserType_exports = {};
 __export(browserType_exports, {
-  BrowserReadyState: () => BrowserReadyState,
   BrowserType: () => BrowserType,
   kNoXServerRunningError: () => kNoXServerRunningError
 });
@@ -46,30 +45,18 @@ var import_helper = require("./helper");
 var import_instrumentation = require("./instrumentation");
 var import_pipeTransport = require("./pipeTransport");
 var import_processLauncher = require("./utils/processLauncher");
-var import_progress = require("./progress");
 var import_protocolError = require("./protocolError");
 var import_registry = require("./registry");
 var import_socksClientCertificatesInterceptor = require("./socksClientCertificatesInterceptor");
 var import_transport = require("./transport");
 var import_debugLogger = require("./utils/debugLogger");
 const kNoXServerRunningError = "Looks like you launched a headed browser without having a XServer running.\nSet either 'headless: true' or use 'xvfb-run <your-playwright-app>' before running Playwright.\n\n<3 Playwright Team";
-class BrowserReadyState {
-  constructor() {
-    this._wsEndpoint = new import_manualPromise.ManualPromise();
-  }
-  onBrowserExit() {
-    this._wsEndpoint.resolve(void 0);
-  }
-  async waitUntilReady() {
-    const wsEndpoint = await this._wsEndpoint;
-    return { wsEndpoint };
-  }
-}
 class BrowserType extends import_instrumentation.SdkObject {
   constructor(parent, browserName) {
     super(parent, "browser-type");
     this.attribution.browserType = this;
     this._name = browserName;
+    this.logName = "browser";
   }
   executablePath() {
     return import_registry.registry.findExecutable(this._name).executablePath(this.attribution.playwright.options.sdkLanguage) || "";
@@ -77,39 +64,28 @@ class BrowserType extends import_instrumentation.SdkObject {
   name() {
     return this._name;
   }
-  async launch(metadata, options, protocolLogger) {
+  async launch(progress, options, protocolLogger) {
     options = this._validateLaunchOptions(options);
-    const controller = new import_progress.ProgressController(metadata, this);
-    controller.setLogName("browser");
-    const browser = await controller.run((progress) => {
-      const seleniumHubUrl = options.__testHookSeleniumRemoteURL || process.env.SELENIUM_REMOTE_URL;
-      if (seleniumHubUrl)
-        return this._launchWithSeleniumHub(progress, seleniumHubUrl, options);
-      return this._innerLaunchWithRetries(progress, options, void 0, import_helper.helper.debugProtocolLogger(protocolLogger)).catch((e) => {
-        throw this._rewriteStartupLog(e);
-      });
-    }, options.timeout);
-    return browser;
+    const seleniumHubUrl = options.__testHookSeleniumRemoteURL || process.env.SELENIUM_REMOTE_URL;
+    if (seleniumHubUrl)
+      return this._launchWithSeleniumHub(progress, seleniumHubUrl, options);
+    return this._innerLaunchWithRetries(progress, options, void 0, import_helper.helper.debugProtocolLogger(protocolLogger)).catch((e) => {
+      throw this._rewriteStartupLog(e);
+    });
   }
-  async launchPersistentContext(metadata, userDataDir, options) {
+  async launchPersistentContext(progress, userDataDir, options) {
     const launchOptions = this._validateLaunchOptions(options);
-    const controller = new import_progress.ProgressController(metadata, this);
-    controller.setLogName("browser");
-    const browser = await controller.run(async (progress) => {
-      let clientCertificatesProxy;
-      if (options.clientCertificates?.length) {
-        clientCertificatesProxy = new import_socksClientCertificatesInterceptor.ClientCertificatesProxy(options);
-        launchOptions.proxyOverride = await clientCertificatesProxy?.listen();
-        options = { ...options };
-        options.internalIgnoreHTTPSErrors = true;
-      }
-      progress.cleanupWhenAborted(() => clientCertificatesProxy?.close());
-      const browser2 = await this._innerLaunchWithRetries(progress, launchOptions, options, import_helper.helper.debugProtocolLogger(), userDataDir).catch((e) => {
-        throw this._rewriteStartupLog(e);
-      });
-      browser2._defaultContext._clientCertificatesProxy = clientCertificatesProxy;
-      return browser2;
-    }, launchOptions.timeout);
+    let clientCertificatesProxy;
+    if (options.clientCertificates?.length) {
+      clientCertificatesProxy = await progress.raceWithCleanup(import_socksClientCertificatesInterceptor.ClientCertificatesProxy.create(options), (proxy) => proxy.close());
+      launchOptions.proxyOverride = clientCertificatesProxy.proxySettings();
+      options = { ...options };
+      options.internalIgnoreHTTPSErrors = true;
+    }
+    const browser = await this._innerLaunchWithRetries(progress, launchOptions, options, import_helper.helper.debugProtocolLogger(), userDataDir).catch((e) => {
+      throw this._rewriteStartupLog(e);
+    });
+    browser._defaultContext._clientCertificatesProxy = clientCertificatesProxy;
     return browser._defaultContext;
   }
   async _innerLaunchWithRetries(progress, options, persistent, protocolLogger, userDataDir) {
@@ -129,7 +105,7 @@ class BrowserType extends import_instrumentation.SdkObject {
     const browserLogsCollector = new import_debugLogger.RecentLogsCollector();
     const { browserProcess, userDataDir, artifactsDir, transport } = await this._launchProcess(progress, options, !!persistent, browserLogsCollector, maybeUserDataDir);
     if (options.__testHookBeforeCreateBrowser)
-      await options.__testHookBeforeCreateBrowser();
+      await progress.race(options.__testHookBeforeCreateBrowser());
     const browserOptions = {
       name: this._name,
       isChromium: this._name === "chromium",
@@ -151,23 +127,19 @@ class BrowserType extends import_instrumentation.SdkObject {
     if (persistent)
       (0, import_browserContext.validateBrowserContextOptions)(persistent, browserOptions);
     copyTestHooks(options, browserOptions);
-    const browser = await this.connectToTransport(transport, browserOptions, browserLogsCollector);
+    const browser = await progress.race(this.connectToTransport(transport, browserOptions, browserLogsCollector));
     browser._userDataDirForTest = userDataDir;
     if (persistent && !options.ignoreAllDefaultArgs)
       await browser._defaultContext._loadDefaultContext(progress);
     return browser;
   }
-  async _launchProcess(progress, options, isPersistent, browserLogsCollector, userDataDir) {
+  async _prepareToLaunch(options, isPersistent, userDataDir) {
     const {
       ignoreDefaultArgs,
       ignoreAllDefaultArgs,
       args = [],
-      executablePath = null,
-      handleSIGINT = true,
-      handleSIGTERM = true,
-      handleSIGHUP = true
+      executablePath = null
     } = options;
-    const env = options.env ? (0, import_processLauncher.envArrayToObject)(options.env) : process.env;
     await this._createArtifactDirs(options);
     const tempDirectories = [];
     const artifactsDir = await import_fs.default.promises.mkdtemp(import_path.default.join(import_os.default.tmpdir(), "playwright-artifacts-"));
@@ -200,30 +172,40 @@ class BrowserType extends import_instrumentation.SdkObject {
       executable = registryExecutable.executablePathOrDie(this.attribution.playwright.options.sdkLanguage);
       await import_registry.registry.validateHostRequirementsForExecutablesIfNeeded([registryExecutable], this.attribution.playwright.options.sdkLanguage);
     }
-    const readyState = this.readyState(options);
+    return { executable, browserArguments, userDataDir, artifactsDir, tempDirectories };
+  }
+  async _launchProcess(progress, options, isPersistent, browserLogsCollector, userDataDir) {
+    const {
+      handleSIGINT = true,
+      handleSIGTERM = true,
+      handleSIGHUP = true
+    } = options;
+    const env = options.env ? (0, import_processLauncher.envArrayToObject)(options.env) : process.env;
+    const prepared = await progress.race(this._prepareToLaunch(options, isPersistent, userDataDir));
+    progress.cleanupWhenAborted(() => (0, import_fileUtils.removeFolders)(prepared.tempDirectories));
     let transport = void 0;
     let browserProcess = void 0;
+    const exitPromise = new import_manualPromise.ManualPromise();
     const { launchedProcess, gracefullyClose, kill } = await (0, import_processLauncher.launchProcess)({
-      command: executable,
-      args: browserArguments,
-      env: this.amendEnvironment(env, userDataDir, executable, browserArguments),
+      command: prepared.executable,
+      args: prepared.browserArguments,
+      env: this.amendEnvironment(env, prepared.userDataDir, isPersistent),
       handleSIGINT,
       handleSIGTERM,
       handleSIGHUP,
       log: (message) => {
-        readyState?.onBrowserOutput(message);
         progress.log(message);
         browserLogsCollector.log(message);
       },
       stdio: "pipe",
-      tempDirectories,
+      tempDirectories: prepared.tempDirectories,
       attemptToGracefullyClose: async () => {
         if (options.__testHookGracefullyClose)
           await options.__testHookGracefullyClose();
         this.attemptToGracefullyCloseBrowser(transport);
       },
       onExit: (exitCode, signal) => {
-        readyState?.onBrowserExit();
+        exitPromise.resolve();
         if (browserProcess && browserProcess.onclose)
           browserProcess.onclose(exitCode, signal);
       }
@@ -248,15 +230,19 @@ class BrowserType extends import_instrumentation.SdkObject {
       close: () => closeOrKill(options.__testHookBrowserCloseTimeout || import_time.DEFAULT_PLAYWRIGHT_TIMEOUT),
       kill
     };
-    progress.cleanupWhenAborted(() => closeOrKill(progress.timeUntilDeadline()));
-    const wsEndpoint = (await readyState?.waitUntilReady())?.wsEndpoint;
+    progress.cleanupWhenAborted(() => closeOrKill(import_time.DEFAULT_PLAYWRIGHT_TIMEOUT));
+    const { wsEndpoint } = await progress.race([
+      this.waitForReadyState(options, browserLogsCollector),
+      exitPromise.then(() => ({ wsEndpoint: void 0 }))
+    ]);
     if (options.cdpPort !== void 0 || !this.supportsPipeTransport()) {
       transport = await import_transport.WebSocketTransport.connect(progress, wsEndpoint);
     } else {
       const stdio = launchedProcess.stdio;
       transport = new import_pipeTransport.PipeTransport(stdio[3], stdio[4]);
     }
-    return { browserProcess, artifactsDir, userDataDir, transport };
+    progress.cleanupWhenAborted(() => transport.close());
+    return { browserProcess, artifactsDir: prepared.artifactsDir, userDataDir: prepared.userDataDir, transport };
   }
   async _createArtifactDirs(options) {
     if (options.downloadsPath)
@@ -264,7 +250,7 @@ class BrowserType extends import_instrumentation.SdkObject {
     if (options.tracesDir)
       await import_fs.default.promises.mkdir(options.tracesDir, { recursive: true });
   }
-  async connectOverCDP(metadata, endpointURL, options) {
+  async connectOverCDP(progress, endpointURL, options) {
     throw new Error("CDP connections are only supported by Chromium");
   }
   async _launchWithSeleniumHub(progress, hubUrl, options) {
@@ -277,8 +263,8 @@ class BrowserType extends import_instrumentation.SdkObject {
       headless = false;
     if (downloadsPath && !import_path.default.isAbsolute(downloadsPath))
       downloadsPath = import_path.default.join(process.cwd(), downloadsPath);
-    if (this.attribution.playwright.options.socksProxyPort)
-      proxy = { server: `socks5://127.0.0.1:${this.attribution.playwright.options.socksProxyPort}` };
+    if (options.socksProxyPort)
+      proxy = { server: `socks5://127.0.0.1:${options.socksProxyPort}` };
     return { ...options, devtools, headless, downloadsPath, proxy };
   }
   _createUserDataDirArgMisuseError(userDataDirArg) {
@@ -298,8 +284,8 @@ class BrowserType extends import_instrumentation.SdkObject {
       return error;
     return this.doRewriteStartupLog(error);
   }
-  readyState(options) {
-    return void 0;
+  async waitForReadyState(options, browserLogsCollector) {
+    return {};
   }
   async prepareUserDataDir(options, userDataDir) {
   }
@@ -318,7 +304,6 @@ function copyTestHooks(from, to) {
 }
 // Annotate the CommonJS export names for ESM import in node:
 0 && (module.exports = {
-  BrowserReadyState,
   BrowserType,
   kNoXServerRunningError
 });

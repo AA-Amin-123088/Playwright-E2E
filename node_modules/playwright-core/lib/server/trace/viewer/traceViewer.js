@@ -148,29 +148,27 @@ async function openTraceViewerApp(url, browserName, options) {
   const traceViewerPlaywright = (0, import_playwright.createPlaywright)({ sdkLanguage: "javascript", isInternalPlaywright: true });
   const traceViewerBrowser = (0, import_utils2.isUnderTest)() ? "chromium" : browserName;
   const { context, page } = await (0, import_launchApp2.launchApp)(traceViewerPlaywright[traceViewerBrowser], {
-    // TODO: store language in the trace.
     sdkLanguage: traceViewerPlaywright.options.sdkLanguage,
     windowSize: { width: 1280, height: 800 },
     persistentContextOptions: {
       ...options?.persistentContextOptions,
       cdpPort: (0, import_utils2.isUnderTest)() ? 0 : void 0,
       headless: !!options?.headless,
-      colorScheme: (0, import_utils2.isUnderTest)() ? "light" : void 0,
-      timeout: 0
+      colorScheme: (0, import_utils2.isUnderTest)() ? "light" : void 0
     }
   });
   const controller = new import_progress.ProgressController((0, import_instrumentation.serverSideCallMetadata)(), context._browser);
   await controller.run(async (progress) => {
     await context._browser._defaultContext._loadDefaultContextAsIs(progress);
+    if (process.env.PWTEST_PRINT_WS_ENDPOINT)
+      process.stderr.write("DevTools listening on: " + context._browser.options.wsEndpoint + "\n");
+    if (!(0, import_utils2.isUnderTest)())
+      await (0, import_launchApp.syncLocalStorageWithSettings)(page, "traceviewer");
+    if ((0, import_utils2.isUnderTest)())
+      page.on("close", () => context.close({ reason: "Trace viewer closed" }).catch(() => {
+      }));
+    await page.mainFrame().goto(progress, url);
   });
-  if (process.env.PWTEST_PRINT_WS_ENDPOINT)
-    process.stderr.write("DevTools listening on: " + context._browser.options.wsEndpoint + "\n");
-  if (!(0, import_utils2.isUnderTest)())
-    await (0, import_launchApp.syncLocalStorageWithSettings)(page, "traceviewer");
-  if ((0, import_utils2.isUnderTest)())
-    page.on("close", () => context.close({ reason: "Trace viewer closed" }).catch(() => {
-    }));
-  await page.mainFrame().goto((0, import_instrumentation.serverSideCallMetadata)(), url, { timeout: 0 });
   return page;
 }
 async function openTraceInBrowser(url) {

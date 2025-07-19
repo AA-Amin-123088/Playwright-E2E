@@ -363,13 +363,12 @@ class FFPage {
         height: viewportRect.height
       };
     }
-    progress.throwIfAborted();
-    const { data } = await this._session.send("Page.screenshot", {
+    const { data } = await progress.race(this._session.send("Page.screenshot", {
       mimeType: "image/" + format,
       clip: documentRect,
       quality,
       omitDeviceScaleFactor: scale === "css"
-    });
+    }));
     return Buffer.from(data, "base64");
   }
   async getContentFrame(handle) {
@@ -475,8 +474,8 @@ class FFPage {
   }
   async inputActionEpilogue() {
   }
-  async resetForReuse() {
-    await this.rawMouse.move(-1, -1, "none", /* @__PURE__ */ new Set(), /* @__PURE__ */ new Set(), false);
+  async resetForReuse(progress) {
+    await this.rawMouse.move(progress, -1, -1, "none", /* @__PURE__ */ new Set(), /* @__PURE__ */ new Set(), false);
   }
   async getFrameElement(frame) {
     const parent = frame.parentFrame();

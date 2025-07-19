@@ -28,14 +28,16 @@ class CRCoverage {
     this._jsCoverage = new JSCoverage(client);
     this._cssCoverage = new CSSCoverage(client);
   }
-  async startJSCoverage(options) {
-    return await this._jsCoverage.start(options);
+  async startJSCoverage(progress, options) {
+    progress.cleanupWhenAborted(() => this._jsCoverage.stop());
+    await progress.race(this._jsCoverage.start(options));
   }
   async stopJSCoverage() {
     return await this._jsCoverage.stop();
   }
-  async startCSSCoverage(options) {
-    return await this._cssCoverage.start(options);
+  async startCSSCoverage(progress, options) {
+    progress.cleanupWhenAborted(() => this._cssCoverage.stop());
+    await progress.race(this._cssCoverage.start(options));
   }
   async stopCSSCoverage() {
     return await this._cssCoverage.stop();

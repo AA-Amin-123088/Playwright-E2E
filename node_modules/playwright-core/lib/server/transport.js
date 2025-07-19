@@ -43,8 +43,6 @@ class WebSocketTransport {
     this._ws = new import_utilsBundle.ws(url, [], {
       maxPayload: 256 * 1024 * 1024,
       // 256Mb,
-      // Prevent internal http client error when passing negative timeout.
-      handshakeTimeout: Math.max(progress?.timeUntilDeadline() ?? import_utils.DEFAULT_PLAYWRIGHT_TIMEOUT, 1),
       headers: options.headers,
       followRedirects: options.followRedirects,
       agent: /^(https|wss):\/\//.test(url) ? import_happyEyeballs.httpsHappyEyeballsAgent : import_happyEyeballs.httpHappyEyeballsAgent,
@@ -99,12 +97,8 @@ class WebSocketTransport {
     const logUrl = stripQueryParams(url);
     progress?.log(`<ws connecting> ${logUrl}`);
     const transport = new WebSocketTransport(progress, url, logUrl, { ...options, followRedirects: !!options.followRedirects && hadRedirects });
-    let success = false;
-    progress?.cleanupWhenAborted(async () => {
-      if (!success)
-        await transport.closeAndWait().catch((e) => null);
-    });
-    const result = await new Promise((fulfill, reject) => {
+    progress?.cleanupWhenAborted(() => transport.closeAndWait());
+    const resultPromise = new Promise((fulfill, reject) => {
       transport._ws.on("open", async () => {
         progress?.log(`<ws connected> ${logUrl}`);
         fulfill({ transport });
@@ -136,6 +130,7 @@ ${Buffer.concat(chunks)}` : errorPrefix;
         });
       });
     });
+    const result = progress ? await progress.race(resultPromise) : await resultPromise;
     if (result.redirect) {
       const newHeaders = Object.fromEntries(Object.entries(options.headers || {}).filter(([name]) => {
         return !name.includes("access-key") && name.toLowerCase() !== "authorization";
@@ -148,7 +143,6 @@ ${Buffer.concat(chunks)}` : errorPrefix;
         /* hadRedirects */
       );
     }
-    success = true;
     return transport;
   }
   send(message) {

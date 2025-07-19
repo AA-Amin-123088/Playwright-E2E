@@ -43,14 +43,13 @@ class Playwright extends import_channelOwner.ChannelOwner {
     this._android._playwright = this;
     this._electron = import_electron.Electron.from(initializer.electron);
     this._electron._playwright = this;
-    this._bidiChromium = import_browserType.BrowserType.from(initializer.bidiChromium);
+    this._bidiChromium = import_browserType.BrowserType.from(initializer._bidiChromium);
     this._bidiChromium._playwright = this;
-    this._bidiFirefox = import_browserType.BrowserType.from(initializer.bidiFirefox);
+    this._bidiFirefox = import_browserType.BrowserType.from(initializer._bidiFirefox);
     this._bidiFirefox._playwright = this;
     this.devices = this._connection.localUtils()?.devices ?? {};
     this.selectors = new import_selectors.Selectors(this._connection._platform);
     this.errors = { TimeoutError: import_errors.TimeoutError };
-    global._playwrightInstance = this;
   }
   static from(channel) {
     return channel._object;

@@ -54,7 +54,6 @@ class APIRequestContext extends import_instrumentation.SdkObject {
     super(parent, "request-context");
     this.fetchResponses = /* @__PURE__ */ new Map();
     this.fetchLog = /* @__PURE__ */ new Map();
-    this._activeProgressControllers = /* @__PURE__ */ new Set();
     APIRequestContext.allInstances.add(this);
   }
   static {
@@ -90,7 +89,7 @@ class APIRequestContext extends import_instrumentation.SdkObject {
     this.fetchResponses.set(uid, body);
     return uid;
   }
-  async fetch(params, metadata) {
+  async fetch(progress, params) {
     const defaults = this._defaultOptions();
     const headers = {
       "user-agent": defaults.userAgent,
@@ -122,15 +121,11 @@ class APIRequestContext extends import_instrumentation.SdkObject {
       agent = (0, import_utils.createProxyAgent)(proxy, requestUrl);
     let maxRedirects = params.maxRedirects ?? (defaults.maxRedirects ?? 20);
     maxRedirects = maxRedirects === 0 ? -1 : maxRedirects;
-    const timeout = params.timeout;
-    const deadline = timeout && (0, import_utils.monotonicTime)() + timeout;
     const options = {
       method,
       headers,
       agent,
       maxRedirects,
-      timeout,
-      deadline,
       ...(0, import_socksClientCertificatesInterceptor.getMatchingTLSOptionsForOrigin)(this._defaultOptions().clientCertificates, requestUrl.origin),
       __testHookLookup: params.__testHookLookup
     };
@@ -139,12 +134,9 @@ class APIRequestContext extends import_instrumentation.SdkObject {
     const postData = serializePostData(params, headers);
     if (postData)
       setHeader(headers, "content-length", String(postData.byteLength));
-    const controller = new import_progress.ProgressController(metadata, this);
-    const fetchResponse = await controller.run((progress) => {
-      return this._sendRequestWithRetries(progress, requestUrl, options, postData, params.maxRetries);
-    });
+    const fetchResponse = await this._sendRequestWithRetries(progress, requestUrl, options, postData, params.maxRetries);
     const fetchUid = this._storeResponseBody(fetchResponse.body);
-    this.fetchLog.set(fetchUid, controller.metadata.log);
+    this.fetchLog.set(fetchUid, progress.metadata.log);
     const failOnStatusCode = params.failOnStatusCode !== void 0 ? params.failOnStatusCode : !!defaults.failOnStatusCode;
     if (failOnStatusCode && (fetchResponse.status < 200 || fetchResponse.status >= 400)) {
       let responseText = "";
@@ -182,10 +174,10 @@ ${text}`;
     }
     return cookies;
   }
-  async _updateRequestCookieHeader(url, headers) {
+  async _updateRequestCookieHeader(progress, url, headers) {
     if (getHeader(headers, "cookie") !== void 0)
       return;
-    const contextCookies = await this._cookies(url);
+    const contextCookies = await progress.race(this._cookies(url));
     const cookies = contextCookies.filter((c) => new import_cookieStore.Cookie(c).matches(url));
     if (cookies.length) {
       const valueArray = cookies.map((c) => `${c.name}=${c.value}`);
@@ -199,22 +191,24 @@ ${text}`;
       try {
         return await this._sendRequest(progress, url, options, postData);
       } catch (e) {
+        if ((0, import_progress.isAbortError)(e))
+          throw e;
         e = (0, import_socksClientCertificatesInterceptor.rewriteOpenSSLErrorIfNeeded)(e);
         if (maxRetries === 0)
           throw e;
-        if (i === maxRetries || options.deadline && (0, import_utils.monotonicTime)() + backoff > options.deadline)
+        if (i === maxRetries)
           throw new Error(`Failed after ${i + 1} attempt(s): ${e}`);
         if (e.code !== "ECONNRESET")
           throw e;
         progress.log(`  Received ECONNRESET, will retry after ${backoff}ms.`);
-        await new Promise((f) => setTimeout(f, backoff));
+        await progress.wait(backoff);
         backoff *= 2;
       }
     }
     throw new Error("Unreachable");
   }
   async _sendRequest(progress, url, options, postData) {
-    await this._updateRequestCookieHeader(url, options.headers);
+    await this._updateRequestCookieHeader(progress, url, options.headers);
     const requestCookies = getHeader(options.headers, "cookie")?.split(";").map((p) => {
       const [name, value] = p.split("=").map((v) => v.trim());
       return { name, value };
@@ -227,7 +221,7 @@ ${text}`;
       postData
     };
     this.emit(APIRequestContext.Events.Request, requestEvent);
-    return new Promise((fulfill, reject) => {
+    const resultPromise = new Promise((fulfill, reject) => {
       const requestConstructor = (url.protocol === "https:" ? import_https.default : import_http.default).request;
       const agent = options.agent || (url.protocol === "https:" ? import_happyEyeballs.httpsHappyEyeballsAgent : import_happyEyeballs.httpHappyEyeballsAgent);
       const requestOptions = { ...options, agent };
@@ -308,8 +302,6 @@ ${text}`;
             headers,
             agent: options.agent,
             maxRedirects: options.maxRedirects - 1,
-            timeout: options.timeout,
-            deadline: options.deadline,
             ...(0, import_socksClientCertificatesInterceptor.getMatchingTLSOptionsForOrigin)(this._defaultOptions().clientCertificates, url.origin),
             __testHookLookup: options.__testHookLookup
           };
@@ -387,6 +379,7 @@ ${text}`;
         body.on("end", notifyBodyFinished);
       });
       request.on("error", reject);
+      progress.cleanupWhenAborted(() => request.destroy());
       listeners.push(
         import_utils.eventsHelper.addEventListener(this, APIRequestContext.Events.Dispose, () => {
           reject(new Error("Request context disposed."));
@@ -434,22 +427,11 @@ ${text}`;
         for (const [name, value] of Object.entries(options.headers))
           progress.log(`  ${name}: ${value}`);
       }
-      if (options.deadline) {
-        const rejectOnTimeout = () => {
-          reject(new Error(`Request timed out after ${options.timeout}ms`));
-          request.destroy();
-        };
-        const remaining = options.deadline - (0, import_utils.monotonicTime)();
-        if (remaining <= 0) {
-          rejectOnTimeout();
-          return;
-        }
-        request.setTimeout(remaining, rejectOnTimeout);
-      }
       if (postData)
         request.write(postData);
       request.end();
     });
+    return progress.race(resultPromise);
   }
   _getHttpCredentials(url) {
     if (!this._defaultOptions().httpCredentials?.origin || url.origin.toLowerCase() === this._defaultOptions().httpCredentials?.origin?.toLowerCase())
@@ -505,8 +487,8 @@ class BrowserContextAPIRequestContext extends APIRequestContext {
   async _cookies(url) {
     return await this._context.cookies(url.toString());
   }
-  async storageState(indexedDB) {
-    return this._context.storageState(indexedDB);
+  async storageState(progress, indexedDB) {
+    return this._context.storageState(progress, indexedDB);
   }
 }
 class GlobalAPIRequestContext extends APIRequestContext {
@@ -550,7 +532,7 @@ class GlobalAPIRequestContext extends APIRequestContext {
   async _cookies(url) {
     return this._cookieStore.cookies(url);
   }
-  async storageState(indexedDB = false) {
+  async storageState(progress, indexedDB = false) {
     return {
       cookies: this._cookieStore.allCookies(),
       origins: (this._origins || []).map((origin) => ({ ...origin, indexedDB: indexedDB ? origin.indexedDB : [] }))

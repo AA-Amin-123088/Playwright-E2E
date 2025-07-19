@@ -173,9 +173,9 @@ function parseAriaSnapshot(yaml, text, options = {}) {
   convertSeq(fragment, yamlDoc.contents);
   if (errors.length)
     return { errors, fragment: emptyFragment };
-  if (fragment.children?.length === 1)
-    return { fragment: fragment.children[0], errors };
-  return { fragment, errors };
+  if (fragment.children?.length === 1 && (!fragment.containerMode || fragment.containerMode === "contain"))
+    return { fragment: fragment.children[0], errors: [] };
+  return { fragment, errors: [] };
 }
 const emptyFragment = { kind: "role", role: "fragment" };
 function normalizeWhitespace(text) {
@@ -344,6 +344,11 @@ class KeyParser {
     if (key === "expanded") {
       this._assert(value === "true" || value === "false", 'Value of "expanded" attribute must be a boolean', errorPos);
       node.expanded = value === "true";
+      return;
+    }
+    if (key === "active") {
+      this._assert(value === "true" || value === "false", 'Value of "active" attribute must be a boolean', errorPos);
+      node.active = value === "true";
       return;
     }
     if (key === "level") {

@@ -28,7 +28,8 @@ var __toESM = (mod, isNodeMode, target) => (target = mod != null ? __create(__ge
 var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
 var chromium_exports = {};
 __export(chromium_exports, {
-  Chromium: () => Chromium
+  Chromium: () => Chromium,
+  waitForReadyState: () => waitForReadyState
 });
 module.exports = __toCommonJS(chromium_exports);
 var import_fs = __toESM(require("fs"));
@@ -45,7 +46,6 @@ var import_network = require("../utils/network");
 var import_userAgent = require("../utils/userAgent");
 var import_browserContext = require("../browserContext");
 var import_browserType = require("../browserType");
-var import_browserType2 = require("../browserType");
 var import_helper = require("../helper");
 var import_registry = require("../registry");
 var import_transport = require("../transport");
@@ -53,7 +53,6 @@ var import_crDevTools = require("./crDevTools");
 var import_browser = require("../browser");
 var import_fileUtils = require("../utils/fileUtils");
 var import_processLauncher = require("../utils/processLauncher");
-var import_progress = require("../progress");
 const ARTIFACTS_FOLDER = import_path.default.join(import_os.default.tmpdir(), "playwright-artifacts-");
 class Chromium extends import_browserType.BrowserType {
   constructor(parent) {
@@ -61,12 +60,8 @@ class Chromium extends import_browserType.BrowserType {
     if ((0, import_utils.debugMode)())
       this._devtools = this._createDevTools();
   }
-  async connectOverCDP(metadata, endpointURL, options) {
-    const controller = new import_progress.ProgressController(metadata, this);
-    controller.setLogName("browser");
-    return controller.run(async (progress) => {
-      return await this._connectOverCDPInternal(progress, endpointURL, options);
-    }, options.timeout);
+  async connectOverCDP(progress, endpointURL, options) {
+    return await this._connectOverCDPInternal(progress, endpointURL, options);
   }
   async _connectOverCDPInternal(progress, endpointURL, options, onClose) {
     let headersMap;
@@ -76,10 +71,10 @@ class Chromium extends import_browserType.BrowserType {
       headersMap = { "User-Agent": (0, import_userAgent.getUserAgent)() };
     else if (headersMap && !Object.keys(headersMap).some((key) => key.toLowerCase() === "user-agent"))
       headersMap["User-Agent"] = (0, import_userAgent.getUserAgent)();
-    const artifactsDir = await import_fs.default.promises.mkdtemp(ARTIFACTS_FOLDER);
+    const artifactsDir = await progress.race(import_fs.default.promises.mkdtemp(ARTIFACTS_FOLDER));
     const wsEndpoint = await urlToWSEndpoint(progress, endpointURL, headersMap);
-    progress.throwIfAborted();
     const chromeTransport = await import_transport.WebSocketTransport.connect(progress, wsEndpoint, { headers: headersMap });
+    progress.cleanupWhenAborted(() => chromeTransport.close());
     const cleanedUp = new import_manualPromise.ManualPromise();
     const doCleanup = async () => {
       await (0, import_fileUtils.removeFolders)([artifactsDir]);
@@ -103,11 +98,10 @@ class Chromium extends import_browserType.BrowserType {
       artifactsDir,
       downloadsPath: options.downloadsPath || artifactsDir,
       tracesDir: options.tracesDir || artifactsDir,
-      originalLaunchOptions: { timeout: options.timeout }
+      originalLaunchOptions: {}
     };
     (0, import_browserContext.validateBrowserContextOptions)(persistent, browserOptions);
-    progress.throwIfAborted();
-    const browser = await import_crBrowser.CRBrowser.connect(this.attribution.playwright, chromeTransport, browserOptions);
+    const browser = await progress.race(import_crBrowser.CRBrowser.connect(this.attribution.playwright, chromeTransport, browserOptions));
     browser._isCollocatedWithServer = false;
     browser.on(import_browser.Browser.Events.Disconnected, doCleanup);
     return browser;
@@ -151,7 +145,7 @@ class Chromium extends import_browserType.BrowserType {
     ].join("\n");
     return error;
   }
-  amendEnvironment(env, userDataDir, executable, browserArguments) {
+  amendEnvironment(env) {
     return env;
   }
   attemptToGracefullyCloseBrowser(transport) {
@@ -159,7 +153,7 @@ class Chromium extends import_browserType.BrowserType {
     transport.send(message);
   }
   async _launchWithSeleniumHub(progress, hubUrl, options) {
-    await this._createArtifactDirs(options);
+    await progress.race(this._createArtifactDirs(options));
     if (!hubUrl.endsWith("/"))
       hubUrl = hubUrl + "/";
     const args = this._innerDefaultArgs(options);
@@ -181,7 +175,7 @@ class Chromium extends import_browserType.BrowserType {
         headers = remoteHeaders;
     }
     progress.log(`<selenium> connecting to ${hubUrl}`);
-    const response = await (0, import_network.fetchData)({
+    const response = await (0, import_network.fetchData)(progress, {
       url: hubUrl + "session",
       method: "POST",
       headers: {
@@ -190,15 +184,14 @@ class Chromium extends import_browserType.BrowserType {
       },
       data: JSON.stringify({
         capabilities: { alwaysMatch: desiredCapabilities }
-      }),
-      timeout: progress.timeUntilDeadline()
+      })
     }, seleniumErrorHandler);
     const value = JSON.parse(response).value;
     const sessionId = value.sessionId;
     progress.log(`<selenium> connected to sessionId=${sessionId}`);
     const disconnectFromSelenium = async () => {
       progress.log(`<selenium> disconnecting from sessionId=${sessionId}`);
-      await (0, import_network.fetchData)({
+      await (0, import_network.fetchData)(void 0, {
         url: hubUrl + "session/" + sessionId,
         method: "DELETE",
         headers
@@ -229,10 +222,9 @@ class Chromium extends import_browserType.BrowserType {
         if (endpointURL.hostname === "localhost" || endpointURL.hostname === "127.0.0.1") {
           const sessionInfoUrl = new URL(hubUrl).origin + "/grid/api/testsession?session=" + sessionId;
           try {
-            const sessionResponse = await (0, import_network.fetchData)({
+            const sessionResponse = await (0, import_network.fetchData)(progress, {
               url: sessionInfoUrl,
               method: "GET",
-              timeout: progress.timeUntilDeadline(),
               headers
             }, seleniumErrorHandler);
             const proxyId = JSON.parse(sessionResponse).proxyId;
@@ -277,8 +269,7 @@ class Chromium extends import_browserType.BrowserType {
     const chromeArguments = [...(0, import_chromiumSwitches.chromiumSwitches)(options.assistantMode, options.channel)];
     if (import_os.default.platform() === "darwin") {
       chromeArguments.push("--enable-use-zoom-for-dsf=false");
-      if (options.headless && (!options.channel || options.channel === "chromium-headless-shell"))
-        chromeArguments.push("--use-angle");
+      chromeArguments.push("--enable-unsafe-swiftshader");
     }
     if (options.devtools)
       chromeArguments.push("--auto-open-devtools-for-tabs");
@@ -296,12 +287,12 @@ class Chromium extends import_browserType.BrowserType {
     if (proxy) {
       const proxyURL = new URL(proxy.server);
       const isSocks = proxyURL.protocol === "socks5:";
-      if (isSocks && !this.attribution.playwright.options.socksProxyPort) {
+      if (isSocks && !options.socksProxyPort) {
         chromeArguments.push(`--host-resolver-rules="MAP * ~NOTFOUND , EXCLUDE ${proxyURL.hostname}"`);
       }
       chromeArguments.push(`--proxy-server=${proxy.server}`);
       const proxyBypassRules = [];
-      if (this.attribution.playwright.options.socksProxyPort)
+      if (options.socksProxyPort)
         proxyBypassRules.push("<-loopback>");
       if (proxy.bypass)
         proxyBypassRules.push(...proxy.bypass.split(",").map((t) => t.trim()).map((t) => t.startsWith(".") ? "*" + t : t));
@@ -313,10 +304,8 @@ class Chromium extends import_browserType.BrowserType {
     chromeArguments.push(...args);
     return chromeArguments;
   }
-  readyState(options) {
-    if (options.cdpPort !== void 0 || options.args?.some((a) => a.startsWith("--remote-debugging-port")))
-      return new ChromiumReadyState();
-    return void 0;
+  async waitForReadyState(options, browserLogsCollector) {
+    return waitForReadyState(options, browserLogsCollector);
   }
   getExecutableName(options) {
     if (options.channel)
@@ -324,24 +313,31 @@ class Chromium extends import_browserType.BrowserType {
     return options.headless ? "chromium-headless-shell" : "chromium";
   }
 }
-class ChromiumReadyState extends import_browserType2.BrowserReadyState {
-  onBrowserOutput(message) {
+async function waitForReadyState(options, browserLogsCollector) {
+  if (options.cdpPort === void 0 && !options.args?.some((a) => a.startsWith("--remote-debugging-port")))
+    return {};
+  const result = new import_manualPromise.ManualPromise();
+  browserLogsCollector.onMessage((message) => {
     if (message.includes("Failed to create a ProcessSingleton for your profile directory.")) {
-      this._wsEndpoint.reject(new Error("Failed to create a ProcessSingleton for your profile directory. This usually means that the profile is already in use by another instance of Chromium."));
+      result.reject(new Error("Failed to create a ProcessSingleton for your profile directory. This usually means that the profile is already in use by another instance of Chromium."));
     }
     const match = message.match(/DevTools listening on (.*)/);
     if (match)
-      this._wsEndpoint.resolve(match[1]);
-  }
+      result.resolve({ wsEndpoint: match[1] });
+  });
+  return result;
 }
 async function urlToWSEndpoint(progress, endpointURL, headers) {
   if (endpointURL.startsWith("ws"))
     return endpointURL;
   progress.log(`<ws preparing> retrieving websocket url from ${endpointURL}`);
   const url = new URL(endpointURL);
+  if (!url.pathname.endsWith("/"))
+    url.pathname += "/";
   url.pathname += "json/version/";
   const httpURL = url.toString();
   const json = await (0, import_network.fetchData)(
+    progress,
     {
       url: httpURL,
       headers
@@ -385,5 +381,6 @@ function parseSeleniumRemoteParams(env, progress) {
 }
 // Annotate the CommonJS export names for ESM import in node:
 0 && (module.exports = {
-  Chromium
+  Chromium,
+  waitForReadyState
 });

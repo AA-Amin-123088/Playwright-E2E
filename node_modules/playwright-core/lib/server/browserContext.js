@@ -50,7 +50,6 @@ var import_instrumentation = require("./instrumentation");
 var network = __toESM(require("./network"));
 var import_page = require("./page");
 var import_page2 = require("./page");
-var import_recorder = require("./recorder");
 var import_recorderApp = require("./recorder/recorderApp");
 var import_selectors = require("./selectors");
 var import_tracing = require("./trace/recorder/tracing");
@@ -59,7 +58,6 @@ class BrowserContext extends import_instrumentation.SdkObject {
   constructor(browser, options, browserContextId) {
     super(browser, "browser-context");
     this._pageBindings = /* @__PURE__ */ new Map();
-    this._activeProgressControllers = /* @__PURE__ */ new Set();
     this.requestInterceptors = [];
     this._closedStatus = "open";
     this._permissions = /* @__PURE__ */ new Map();
@@ -99,7 +97,8 @@ class BrowserContext extends import_instrumentation.SdkObject {
       RequestFulfilled: "requestfulfilled",
       RequestContinued: "requestcontinued",
       BeforeClose: "beforeclose",
-      VideoStarted: "videostarted"
+      VideoStarted: "videostarted",
+      RecorderEvent: "recorderevent"
     };
   }
   isPersistentContext() {
@@ -113,17 +112,17 @@ class BrowserContext extends import_instrumentation.SdkObject {
       return;
     this._debugger = new import_debugger.Debugger(this);
     if ((0, import_debug.debugMode)() === "inspector")
-      await import_recorder.Recorder.show(this, import_recorderApp.RecorderApp.factory(this), { pauseOnNextStatement: true });
+      await import_recorderApp.RecorderApp.show(this, { pauseOnNextStatement: true });
     if (this._debugger.isPaused())
-      import_recorder.Recorder.showInspectorNoReply(this, import_recorderApp.RecorderApp.factory(this));
+      import_recorderApp.RecorderApp.showInspectorNoReply(this);
     this._debugger.on(import_debugger.Debugger.Events.PausedStateChanged, () => {
       if (this._debugger.isPaused())
-        import_recorder.Recorder.showInspectorNoReply(this, import_recorderApp.RecorderApp.factory(this));
+        import_recorderApp.RecorderApp.showInspectorNoReply(this);
     });
     if ((0, import_debug.debugMode)() === "console")
       await this.extendInjectedScript("function Console(injectedScript) { injectedScript.consoleApi.install(); }");
     if (this._options.serviceWorkers === "block")
-      await this.addInitScript(`
+      await this.addInitScript(void 0, `
 if (navigator.serviceWorker) navigator.serviceWorker.register = async () => { console.warn('Service Worker registration blocked by Playwright'); };
 `);
     if (this._options.permissions)
@@ -141,11 +140,6 @@ if (navigator.serviceWorker) navigator.serviceWorker.register = async () => { co
       return false;
     return true;
   }
-  async stopPendingOperations(reason) {
-    for (const controller of this._activeProgressControllers)
-      controller.abort(new Error(reason));
-    await new Promise((f) => setTimeout(f, 0));
-  }
   static reusableContextHash(params) {
     const paramsCopy = { ...params };
     if (paramsCopy.selectorEngines?.length === 0)
@@ -159,8 +153,8 @@ if (navigator.serviceWorker) navigator.serviceWorker.register = async () => { co
       delete paramsCopy[key];
     return JSON.stringify(paramsCopy);
   }
-  async resetForReuse(metadata, params) {
-    await this.tracing.resetForReuse();
+  async resetForReuse(progress, params) {
+    await this.tracing.resetForReuse(progress);
     if (params) {
       for (const key of paramsThatAllowContextReuse)
         this._options[key] = params[key];
@@ -168,27 +162,24 @@ if (navigator.serviceWorker) navigator.serviceWorker.register = async () => { co
         this.selectors().setTestIdAttributeName(params.testIdAttributeName);
     }
     let page = this.pages()[0];
-    const [, ...otherPages] = this.pages();
+    const otherPages = this.possiblyUninitializedPages().filter((p) => p !== page);
     for (const p of otherPages)
-      await p.close(metadata);
+      await p.close();
     if (page && page.hasCrashed()) {
-      await page.close(metadata);
+      await page.close();
       page = void 0;
     }
-    await page?.mainFrame().goto(metadata, "about:blank", { timeout: 0 });
-    await this._resetStorage();
-    await this.clock.resetForReuse();
-    if (this._options.permissions)
-      await this.grantPermissions(this._options.permissions);
-    else
-      await this.clearPermissions();
-    await this.setExtraHTTPHeaders(this._options.extraHTTPHeaders || []);
-    await this.setGeolocation(this._options.geolocation);
-    await this.setOffline(!!this._options.offline);
-    await this.setUserAgent(this._options.userAgent);
-    await this.clearCache();
-    await this._resetCookies();
-    await page?.resetForReuse(metadata);
+    await page?.mainFrame().gotoImpl(progress, "about:blank", {});
+    await this._resetStorage(progress);
+    await progress.race(this.clock.resetForReuse());
+    await progress.race(this.setUserAgent(this._options.userAgent));
+    await progress.race(this.clearCache());
+    await progress.race(this.doClearCookies());
+    await progress.race(this.doUpdateDefaultEmulatedMedia());
+    await progress.race(this.doUpdateDefaultViewport());
+    if (this._options.storageState?.cookies)
+      await progress.race(this.addCookies(this._options.storageState?.cookies));
+    await page?.resetForReuse(progress);
   }
   _browserClosed() {
     for (const page of this.pages())
@@ -235,8 +226,8 @@ if (navigator.serviceWorker) navigator.serviceWorker.register = async () => { co
   setHTTPCredentials(httpCredentials) {
     return this.doSetHTTPCredentials(httpCredentials);
   }
-  hasBinding(name) {
-    return this._pageBindings.has(name);
+  getBindingClient(name) {
+    return this._pageBindings.get(name)?.forClient;
   }
   async exposePlaywrightBindingIfNeeded() {
     if (this._playwrightBindingExposed)
@@ -251,18 +242,20 @@ if (navigator.serviceWorker) navigator.serviceWorker.register = async () => { co
   needsPlaywrightBinding() {
     return this._playwrightBindingExposed;
   }
-  async exposeBinding(name, needsHandle, playwrightBinding) {
+  async exposeBinding(progress, name, needsHandle, playwrightBinding, forClient) {
     if (this._pageBindings.has(name))
       throw new Error(`Function "${name}" has been already registered`);
     for (const page of this.pages()) {
       if (page.getBinding(name))
         throw new Error(`Function "${name}" has been already registered in one of the pages`);
     }
-    await this.exposePlaywrightBindingIfNeeded();
+    await progress.race(this.exposePlaywrightBindingIfNeeded());
     const binding = new import_page2.PageBinding(name, playwrightBinding, needsHandle);
+    binding.forClient = forClient;
     this._pageBindings.set(name, binding);
-    await this.doAddInitScript(binding.initScript);
-    await this.safeNonStallingEvaluateInAllFrames(binding.initScript.source, "main");
+    progress.cleanupWhenAborted(() => this._pageBindings.delete(name));
+    await progress.race(this.doAddInitScript(binding.initScript));
+    await progress.race(this.safeNonStallingEvaluateInAllFrames(binding.initScript.source, "main"));
     return binding;
   }
   async removeExposedBindings(bindings) {
@@ -290,16 +283,33 @@ if (navigator.serviceWorker) navigator.serviceWorker.register = async () => { co
     this._permissions.clear();
     await this.doClearPermissions();
   }
+  async setExtraHTTPHeaders(progress, headers) {
+    const oldHeaders = this._options.extraHTTPHeaders;
+    this._options.extraHTTPHeaders = headers;
+    progress.cleanupWhenAborted(async () => {
+      this._options.extraHTTPHeaders = oldHeaders;
+      await this.doUpdateExtraHTTPHeaders();
+    });
+    await progress.race(this.doUpdateExtraHTTPHeaders());
+  }
+  async setOffline(progress, offline) {
+    const oldOffline = this._options.offline;
+    this._options.offline = offline;
+    progress.cleanupWhenAborted(async () => {
+      this._options.offline = oldOffline;
+      await this.doUpdateOffline();
+    });
+    await progress.race(this.doUpdateOffline());
+  }
   async _loadDefaultContextAsIs(progress) {
     if (!this.possiblyUninitializedPages().length) {
       const waitForEvent = import_helper.helper.waitForEvent(progress, this, BrowserContext.Events.Page);
-      progress.cleanupWhenAborted(() => waitForEvent.dispose);
       await Promise.race([waitForEvent.promise, this._closePromise]);
     }
     const page = this.possiblyUninitializedPages()[0];
     if (!page)
       return;
-    const pageOrError = await page.waitForInitializedOrError();
+    const pageOrError = await progress.race(page.waitForInitializedOrError());
     if (pageOrError instanceof Error)
       throw pageOrError;
     await page.mainFrame()._waitForLoadState(progress, "load");
@@ -311,8 +321,8 @@ if (navigator.serviceWorker) navigator.serviceWorker.register = async () => { co
       return;
     const browserName = this._browser.options.name;
     if (this._options.isMobile && browserName === "chromium" || this._options.locale && browserName === "webkit") {
-      await this.newPage(progress.metadata);
-      await defaultPage.close(progress.metadata);
+      await this.newPage(progress, false);
+      await defaultPage.close();
     }
   }
   _authenticateProxyViaHeader() {
@@ -335,10 +345,15 @@ if (navigator.serviceWorker) navigator.serviceWorker.register = async () => { co
     if (username)
       this._options.httpCredentials = { username, password: password || "" };
   }
-  async addInitScript(source, name) {
-    const initScript = new import_page.InitScript(source, name);
+  async addInitScript(progress, source) {
+    const initScript = new import_page.InitScript(source);
     this.initScripts.push(initScript);
-    await this.doAddInitScript(initScript);
+    progress?.cleanupWhenAborted(() => this.removeInitScripts([initScript]));
+    const promise = this.doAddInitScript(initScript);
+    if (progress)
+      await progress.race(promise);
+    else
+      await promise;
     return initScript;
   }
   async removeInitScripts(initScripts) {
@@ -346,7 +361,7 @@ if (navigator.serviceWorker) navigator.serviceWorker.register = async () => { co
     this.initScripts = this.initScripts.filter((script) => !set.has(script));
     await this.doRemoveInitScripts(initScripts);
   }
-  async addRequestInterceptor(handler) {
+  async addRequestInterceptor(progress, handler) {
     this.requestInterceptors.push(handler);
     await this.doUpdateRequestInterception();
   }
@@ -398,9 +413,9 @@ if (navigator.serviceWorker) navigator.serviceWorker.register = async () => { co
     }
     await this._closePromise;
   }
-  async newPage(metadata) {
-    const page = await this.doCreateNewPage(metadata.isServerSide);
-    const pageOrError = await page.waitForInitializedOrError();
+  async newPage(progress, isServerSide) {
+    const page = await progress.raceWithCleanup(this.doCreateNewPage(isServerSide), (page2) => page2.close());
+    const pageOrError = await progress.race(page.waitForInitializedOrError());
     if (pageOrError instanceof import_page2.Page) {
       if (pageOrError.isClosed())
         throw new Error("Page has been closed.");
@@ -411,7 +426,7 @@ if (navigator.serviceWorker) navigator.serviceWorker.register = async () => { co
   addVisitedOrigin(origin) {
     this._origins.add(origin);
   }
-  async storageState(indexedDB = false) {
+  async storageState(progress, indexedDB = false) {
     const result = {
       cookies: await this.cookies(),
       origins: []
@@ -436,81 +451,69 @@ if (navigator.serviceWorker) navigator.serviceWorker.register = async () => { co
       }
     }
     if (originsToSave.size) {
-      const internalMetadata = (0, import_instrumentation.serverSideCallMetadata)();
-      const page = await this.newPage(internalMetadata);
-      page.addRequestInterceptor((route) => {
+      const page = await this.newPage(progress, true);
+      await page.addRequestInterceptor(progress, (route) => {
         route.fulfill({ body: "<html></html>" }).catch(() => {
         });
       }, "prepend");
       for (const origin of originsToSave) {
         const frame = page.mainFrame();
-        await frame.goto(internalMetadata, origin, { timeout: 0 });
-        const storage = await frame.evaluateExpression(collectScript, { world: "utility" });
+        await frame.gotoImpl(progress, origin, {});
+        const storage = await progress.race(frame.evaluateExpression(collectScript, { world: "utility" }));
         if (storage.localStorage.length || storage.indexedDB?.length)
           result.origins.push({ origin, localStorage: storage.localStorage, indexedDB: storage.indexedDB });
       }
-      await page.close(internalMetadata);
+      await page.close();
     }
     return result;
   }
-  async _resetStorage() {
+  async _resetStorage(progress) {
     const oldOrigins = this._origins;
     const newOrigins = new Map(this._options.storageState?.origins?.map((p) => [p.origin, p]) || []);
     if (!oldOrigins.size && !newOrigins.size)
       return;
     let page = this.pages()[0];
-    const internalMetadata = (0, import_instrumentation.serverSideCallMetadata)();
-    page = page || await this.newPage({
-      ...internalMetadata,
-      // Do not mark this page as internal, because we will leave it for later reuse
-      // as a user-visible page.
-      isServerSide: false
-    });
+    page = page || await this.newPage(progress, false);
     const interceptor = (route) => {
       route.fulfill({ body: "<html></html>" }).catch(() => {
       });
     };
-    await page.addRequestInterceptor(interceptor, "prepend");
+    progress.cleanupWhenAborted(() => page.removeRequestInterceptor(interceptor));
+    await page.addRequestInterceptor(progress, interceptor, "prepend");
     for (const origin of /* @__PURE__ */ new Set([...oldOrigins, ...newOrigins.keys()])) {
       const frame = page.mainFrame();
-      await frame.goto(internalMetadata, origin, { timeout: 0 });
-      await frame.resetStorageForCurrentOriginBestEffort(newOrigins.get(origin));
+      await frame.gotoImpl(progress, origin, {});
+      await progress.race(frame.resetStorageForCurrentOriginBestEffort(newOrigins.get(origin)));
     }
     await page.removeRequestInterceptor(interceptor);
     this._origins = /* @__PURE__ */ new Set([...newOrigins.keys()]);
   }
-  async _resetCookies() {
-    await this.doClearCookies();
-    if (this._options.storageState?.cookies)
-      await this.addCookies(this._options.storageState?.cookies);
-  }
   isSettingStorageState() {
     return this._settingStorageState;
   }
-  async setStorageState(metadata, state) {
+  async setStorageState(progress, state) {
     this._settingStorageState = true;
     try {
       if (state.cookies)
-        await this.addCookies(state.cookies);
+        await progress.race(this.addCookies(state.cookies));
       if (state.origins && state.origins.length) {
-        const internalMetadata = (0, import_instrumentation.serverSideCallMetadata)();
-        const page = await this.newPage(internalMetadata);
-        await page.addRequestInterceptor((route) => {
+        const page = await this.newPage(progress, true);
+        await page.addRequestInterceptor(progress, (route) => {
           route.fulfill({ body: "<html></html>" }).catch(() => {
           });
         }, "prepend");
         for (const originState of state.origins) {
           const frame = page.mainFrame();
-          await frame.goto(metadata, originState.origin, { timeout: 0 });
+          await frame.gotoImpl(progress, originState.origin, {});
           const restoreScript = `(() => {
             const module = {};
             ${rawStorageSource.source}
             const script = new (module.exports.StorageScript())(${this._browser.options.name === "firefox"});
             return script.restore(${JSON.stringify(originState)});
           })()`;
-          await frame.evaluateExpression(restoreScript, { world: "utility" });
+          await progress.race(frame.evaluateExpression(restoreScript, { world: "utility" }));
         }
-        await page.close(internalMetadata);
+        await page.close();
       }
     } finally {
       this._settingStorageState = false;
@@ -529,12 +532,12 @@ if (navigator.serviceWorker) navigator.serviceWorker.register = async () => { co
   async safeNonStallingEvaluateInAllFrames(expression, world, options = {}) {
     await Promise.all(this.pages().map((page) => page.safeNonStallingEvaluateInAllFrames(expression, world, options)));
   }
-  async _harStart(page, options) {
+  harStart(page, options) {
     const harId = (0, import_crypto.createGuid)();
     this._harRecorders.set(harId, new import_harRecorder.HarRecorder(this, page, options));
     return harId;
   }
-  async _harExport(harId) {
+  async harExport(harId) {
     const recorder = this._harRecorders.get(harId || "");
     return recorder.export();
   }

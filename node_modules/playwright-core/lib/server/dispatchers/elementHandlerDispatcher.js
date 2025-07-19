@@ -47,129 +47,126 @@ class ElementHandleDispatcher extends import_jsHandleDispatcher.JSHandleDispatch
       return new import_jsHandleDispatcher.JSHandleDispatcher(scope, handle);
     return new ElementHandleDispatcher(scope, elementHandle);
   }
-  async ownerFrame(params, metadata) {
+  async ownerFrame(params, progress) {
     const frame = await this._elementHandle.ownerFrame();
     return { frame: frame ? import_frameDispatcher.FrameDispatcher.from(this._browserContextDispatcher(), frame) : void 0 };
   }
-  async contentFrame(params, metadata) {
-    const frame = await this._elementHandle.contentFrame();
+  async contentFrame(params, progress) {
+    const frame = await progress.race(this._elementHandle.contentFrame());
     return { frame: frame ? import_frameDispatcher.FrameDispatcher.from(this._browserContextDispatcher(), frame) : void 0 };
   }
-  async generateLocatorString(params, metadata) {
-    return { value: await this._elementHandle.generateLocatorString() };
-  }
-  async getAttribute(params, metadata) {
-    const value = await this._elementHandle.getAttribute(metadata, params.name);
+  async getAttribute(params, progress) {
+    const value = await this._elementHandle.getAttribute(progress, params.name);
     return { value: value === null ? void 0 : value };
   }
-  async inputValue(params, metadata) {
-    const value = await this._elementHandle.inputValue(metadata);
+  async inputValue(params, progress) {
+    const value = await this._elementHandle.inputValue(progress);
     return { value };
   }
-  async textContent(params, metadata) {
-    const value = await this._elementHandle.textContent(metadata);
+  async textContent(params, progress) {
+    const value = await this._elementHandle.textContent(progress);
     return { value: value === null ? void 0 : value };
   }
-  async innerText(params, metadata) {
-    return { value: await this._elementHandle.innerText(metadata) };
+  async innerText(params, progress) {
+    return { value: await this._elementHandle.innerText(progress) };
   }
-  async innerHTML(params, metadata) {
-    return { value: await this._elementHandle.innerHTML(metadata) };
+  async innerHTML(params, progress) {
+    return { value: await this._elementHandle.innerHTML(progress) };
   }
-  async isChecked(params, metadata) {
-    return { value: await this._elementHandle.isChecked(metadata) };
+  async isChecked(params, progress) {
+    return { value: await this._elementHandle.isChecked(progress) };
   }
-  async isDisabled(params, metadata) {
-    return { value: await this._elementHandle.isDisabled(metadata) };
+  async isDisabled(params, progress) {
+    return { value: await this._elementHandle.isDisabled(progress) };
   }
-  async isEditable(params, metadata) {
-    return { value: await this._elementHandle.isEditable(metadata) };
+  async isEditable(params, progress) {
+    return { value: await this._elementHandle.isEditable(progress) };
   }
-  async isEnabled(params, metadata) {
-    return { value: await this._elementHandle.isEnabled(metadata) };
+  async isEnabled(params, progress) {
+    return { value: await this._elementHandle.isEnabled(progress) };
   }
-  async isHidden(params, metadata) {
-    return { value: await this._elementHandle.isHidden(metadata) };
+  async isHidden(params, progress) {
+    return { value: await this._elementHandle.isHidden(progress) };
   }
-  async isVisible(params, metadata) {
-    return { value: await this._elementHandle.isVisible(metadata) };
+  async isVisible(params, progress) {
+    return { value: await this._elementHandle.isVisible(progress) };
   }
-  async dispatchEvent(params, metadata) {
-    await this._elementHandle.dispatchEvent(metadata, params.type, (0, import_jsHandleDispatcher.parseArgument)(params.eventInit));
+  async dispatchEvent(params, progress) {
+    await this._elementHandle.dispatchEvent(progress, params.type, (0, import_jsHandleDispatcher.parseArgument)(params.eventInit));
   }
-  async scrollIntoViewIfNeeded(params, metadata) {
-    await this._elementHandle.scrollIntoViewIfNeeded(metadata, params);
+  async scrollIntoViewIfNeeded(params, progress) {
+    await this._elementHandle.scrollIntoViewIfNeeded(progress);
   }
-  async hover(params, metadata) {
-    return await this._elementHandle.hover(metadata, params);
+  async hover(params, progress) {
+    return await this._elementHandle.hover(progress, params);
   }
-  async click(params, metadata) {
-    return await this._elementHandle.click(metadata, params);
+  async click(params, progress) {
+    return await this._elementHandle.click(progress, params);
   }
-  async dblclick(params, metadata) {
-    return await this._elementHandle.dblclick(metadata, params);
+  async dblclick(params, progress) {
+    return await this._elementHandle.dblclick(progress, params);
   }
-  async tap(params, metadata) {
-    return await this._elementHandle.tap(metadata, params);
+  async tap(params, progress) {
+    return await this._elementHandle.tap(progress, params);
   }
-  async selectOption(params, metadata) {
+  async selectOption(params, progress) {
     const elements = (params.elements || []).map((e) => e._elementHandle);
-    return { values: await this._elementHandle.selectOption(metadata, elements, params.options || [], params) };
+    return { values: await this._elementHandle.selectOption(progress, elements, params.options || [], params) };
   }
-  async fill(params, metadata) {
-    return await this._elementHandle.fill(metadata, params.value, params);
+  async fill(params, progress) {
+    return await this._elementHandle.fill(progress, params.value, params);
   }
-  async selectText(params, metadata) {
-    await this._elementHandle.selectText(metadata, params);
+  async selectText(params, progress) {
+    await this._elementHandle.selectText(progress, params);
   }
-  async setInputFiles(params, metadata) {
-    return await this._elementHandle.setInputFiles(metadata, params);
+  async setInputFiles(params, progress) {
+    return await this._elementHandle.setInputFiles(progress, params);
   }
-  async focus(params, metadata) {
-    await this._elementHandle.focus(metadata);
+  async focus(params, progress) {
+    await this._elementHandle.focus(progress);
   }
-  async type(params, metadata) {
-    return await this._elementHandle.type(metadata, params.text, params);
+  async type(params, progress) {
+    return await this._elementHandle.type(progress, params.text, params);
   }
-  async press(params, metadata) {
-    return await this._elementHandle.press(metadata, params.key, params);
+  async press(params, progress) {
+    return await this._elementHandle.press(progress, params.key, params);
   }
-  async check(params, metadata) {
-    return await this._elementHandle.check(metadata, params);
+  async check(params, progress) {
+    return await this._elementHandle.check(progress, params);
   }
-  async uncheck(params, metadata) {
-    return await this._elementHandle.uncheck(metadata, params);
+  async uncheck(params, progress) {
+    return await this._elementHandle.uncheck(progress, params);
   }
-  async boundingBox(params, metadata) {
-    const value = await this._elementHandle.boundingBox();
+  async boundingBox(params, progress) {
+    const value = await progress.race(this._elementHandle.boundingBox());
     return { value: value || void 0 };
   }
-  async screenshot(params, metadata) {
+  async screenshot(params, progress) {
     const mask = (params.mask || []).map(({ frame, selector }) => ({
       frame: frame._object,
       selector
     }));
-    return { binary: await this._elementHandle.screenshot(metadata, { ...params, mask }) };
+    return { binary: await this._elementHandle.screenshot(progress, { ...params, mask }) };
   }
-  async querySelector(params, metadata) {
-    const handle = await this._elementHandle.querySelector(params.selector, params);
+  async querySelector(params, progress) {
+    const handle = await progress.race(this._elementHandle.querySelector(params.selector, params));
     return { element: ElementHandleDispatcher.fromNullable(this.parentScope(), handle) };
   }
-  async querySelectorAll(params, metadata) {
-    const elements = await this._elementHandle.querySelectorAll(params.selector);
+  async querySelectorAll(params, progress) {
+    const elements = await progress.race(this._elementHandle.querySelectorAll(params.selector));
     return { elements: elements.map((e) => ElementHandleDispatcher.from(this.parentScope(), e)) };
   }
-  async evalOnSelector(params, metadata) {
-    return { value: (0, import_jsHandleDispatcher.serializeResult)(await this._elementHandle.evalOnSelector(params.selector, !!params.strict, params.expression, params.isFunction, (0, import_jsHandleDispatcher.parseArgument)(params.arg))) };
+  async evalOnSelector(params, progress) {
+    return { value: (0, import_jsHandleDispatcher.serializeResult)(await progress.race(this._elementHandle.evalOnSelector(params.selector, !!params.strict, params.expression, params.isFunction, (0, import_jsHandleDispatcher.parseArgument)(params.arg)))) };
   }
-  async evalOnSelectorAll(params, metadata) {
-    return { value: (0, import_jsHandleDispatcher.serializeResult)(await this._elementHandle.evalOnSelectorAll(params.selector, params.expression, params.isFunction, (0, import_jsHandleDispatcher.parseArgument)(params.arg))) };
+  async evalOnSelectorAll(params, progress) {
+    return { value: (0, import_jsHandleDispatcher.serializeResult)(await progress.race(this._elementHandle.evalOnSelectorAll(params.selector, params.expression, params.isFunction, (0, import_jsHandleDispatcher.parseArgument)(params.arg)))) };
   }
-  async waitForElementState(params, metadata) {
-    await this._elementHandle.waitForElementState(metadata, params.state, params);
+  async waitForElementState(params, progress) {
+    await this._elementHandle.waitForElementState(progress, params.state);
   }
-  async waitForSelector(params, metadata) {
-    return { element: ElementHandleDispatcher.fromNullable(this.parentScope(), await this._elementHandle.waitForSelector(metadata, params.selector, params)) };
+  async waitForSelector(params, progress) {
+    return { element: ElementHandleDispatcher.fromNullable(this.parentScope(), await this._elementHandle.waitForSelector(progress, params.selector, params)) };
   }
   _browserContextDispatcher() {
     const parentScope = this.parentScope().parentScope();

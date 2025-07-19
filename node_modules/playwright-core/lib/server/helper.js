@@ -65,9 +65,8 @@ class Helper {
       }));
     });
     const dispose = () => import_eventsHelper.eventsHelper.removeEventListeners(listeners);
-    if (progress)
-      progress.cleanupWhenAborted(dispose);
-    return { promise, dispose };
+    progress.cleanupWhenAborted(dispose);
+    return { promise: progress.race(promise), dispose };
   }
   static secondsToRoundishMillis(value) {
     return (value * 1e6 | 0) / 1e3;

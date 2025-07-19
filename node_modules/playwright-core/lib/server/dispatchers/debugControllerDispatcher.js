@@ -46,34 +46,34 @@ class DebugControllerDispatcher extends import_dispatcher.Dispatcher {
       })
     ];
   }
-  async initialize(params) {
+  async initialize(params, progress) {
     this._object.initialize(params.codegenId, params.sdkLanguage);
   }
-  async setReportStateChanged(params) {
+  async setReportStateChanged(params, progress) {
     this._object.setReportStateChanged(params.enabled);
   }
-  async resetForReuse() {
-    await this._object.resetForReuse();
+  async resetForReuse(params, progress) {
+    await this._object.resetForReuse(progress);
   }
-  async navigate(params) {
-    await this._object.navigate(params.url);
+  async navigate(params, progress) {
+    await this._object.navigate(progress, params.url);
   }
-  async setRecorderMode(params) {
-    await this._object.setRecorderMode(params);
+  async setRecorderMode(params, progress) {
+    await this._object.setRecorderMode(progress, params);
   }
-  async highlight(params) {
-    await this._object.highlight(params);
+  async highlight(params, progress) {
+    await this._object.highlight(progress, params);
   }
-  async hideHighlight() {
-    await this._object.hideHighlight();
+  async hideHighlight(params, progress) {
+    await this._object.hideHighlight(progress);
   }
-  async resume() {
-    await this._object.resume();
+  async resume(params, progress) {
+    await this._object.resume(progress);
   }
-  async kill() {
-    await this._object.kill();
+  async kill(params, progress) {
+    this._object.kill();
   }
-  async closeAllBrowsers() {
+  async closeAllBrowsers(params, progress) {
     await this._object.closeAllBrowsers();
   }
   _onDispose() {

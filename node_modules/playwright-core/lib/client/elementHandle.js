@@ -52,10 +52,6 @@ class ElementHandle extends import_jsHandle.JSHandle {
   async contentFrame() {
     return import_frame.Frame.fromNullable((await this._elementChannel.contentFrame()).frame);
   }
-  async _generateLocatorString() {
-    const value = (await this._elementChannel.generateLocatorString()).value;
-    return value === void 0 ? null : value;
-  }
   async getAttribute(name) {
     const value = (await this._elementChannel.getAttribute({ name })).value;
     return value === void 0 ? null : value;

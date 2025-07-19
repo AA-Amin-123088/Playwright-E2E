@@ -206,16 +206,7 @@ class BidiBrowserContext extends import_browserContext.BrowserContext {
     const promises = [
       super._initialize()
     ];
-    if (this._options.viewport) {
-      promises.push(this._browser._browserSession.send("browsingContext.setViewport", {
-        viewport: {
-          width: this._options.viewport.width,
-          height: this._options.viewport.height
-        },
-        devicePixelRatio: this._options.deviceScaleFactor || 1,
-        userContexts: [this._userContextId()]
-      }));
-    }
+    promises.push(this.doUpdateDefaultViewport());
     if (this._options.geolocation)
       promises.push(this.setGeolocation(this._options.geolocation));
     await Promise.all(promises);
@@ -327,11 +318,11 @@ class BidiBrowserContext extends import_browserContext.BrowserContext {
       userContexts: [this._browserContextId || "default"]
     });
   }
-  async setExtraHTTPHeaders(headers) {
+  async doUpdateExtraHTTPHeaders() {
   }
   async setUserAgent(userAgent) {
   }
-  async setOffline(offline) {
+  async doUpdateOffline() {
   }
   async doSetHTTPCredentials(httpCredentials) {
     this._options.httpCredentials = httpCredentials;
@@ -357,6 +348,20 @@ class BidiBrowserContext extends import_browserContext.BrowserContext {
     await Promise.all(ids.map((script) => this._browser._browserSession.send("script.removePreloadScript", { script })));
   }
   async doUpdateRequestInterception() {
+  }
+  async doUpdateDefaultViewport() {
+    if (!this._options.viewport)
+      return;
+    await this._browser._browserSession.send("browsingContext.setViewport", {
+      viewport: {
+        width: this._options.viewport.width,
+        height: this._options.viewport.height
+      },
+      devicePixelRatio: this._options.deviceScaleFactor || 1,
+      userContexts: [this._userContextId()]
+    });
+  }
+  async doUpdateDefaultEmulatedMedia() {
   }
   async doExposePlaywrightBinding() {
     const args = [{

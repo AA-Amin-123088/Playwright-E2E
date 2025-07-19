@@ -20,6 +20,7 @@ var instrumentation_exports = {};
 __export(instrumentation_exports, {
   SdkObject: () => SdkObject,
   createInstrumentation: () => createInstrumentation,
+  createRootSdkObject: () => createRootSdkObject,
   serverSideCallMetadata: () => serverSideCallMetadata
 });
 module.exports = __toCommonJS(instrumentation_exports);
@@ -33,6 +34,12 @@ class SdkObject extends import_events.EventEmitter {
     this.attribution = { ...parent.attribution };
     this.instrumentation = parent.instrumentation;
   }
+}
+function createRootSdkObject() {
+  const fakeParent = { attribution: {}, instrumentation: createInstrumentation() };
+  const root = new SdkObject(fakeParent);
+  root.guid = "";
+  return root;
 }
 function createInstrumentation() {
   const listeners = /* @__PURE__ */ new Map();
@@ -71,5 +78,6 @@ function serverSideCallMetadata() {
 0 && (module.exports = {
   SdkObject,
   createInstrumentation,
+  createRootSdkObject,
   serverSideCallMetadata
 });

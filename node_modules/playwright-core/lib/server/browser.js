@@ -27,6 +27,7 @@ var import_download = require("./download");
 var import_instrumentation = require("./instrumentation");
 var import_page = require("./page");
 var import_socksClientCertificatesInterceptor = require("./socksClientCertificatesInterceptor");
+var import_progress = require("./progress");
 class Browser extends import_instrumentation.SdkObject {
   constructor(parent, options) {
     super(parent, "browser");
@@ -45,41 +46,44 @@ class Browser extends import_instrumentation.SdkObject {
       Disconnected: "disconnected"
     };
   }
-  async newContext(metadata, options) {
+  sdkLanguage() {
+    return this.options.sdkLanguage || this.attribution.playwright.options.sdkLanguage;
+  }
+  newContextFromMetadata(metadata, options) {
+    const controller = new import_progress.ProgressController(metadata, this);
+    return controller.run((progress) => this.newContext(progress, options));
+  }
+  async newContext(progress, options) {
     (0, import_browserContext.validateBrowserContextOptions)(options, this.options);
     let clientCertificatesProxy;
     if (options.clientCertificates?.length) {
-      clientCertificatesProxy = new import_socksClientCertificatesInterceptor.ClientCertificatesProxy(options);
+      clientCertificatesProxy = await progress.raceWithCleanup(import_socksClientCertificatesInterceptor.ClientCertificatesProxy.create(options), (proxy) => proxy.close());
       options = { ...options };
-      options.proxyOverride = await clientCertificatesProxy.listen();
+      options.proxyOverride = clientCertificatesProxy.proxySettings();
       options.internalIgnoreHTTPSErrors = true;
     }
-    let context;
-    try {
-      context = await this.doCreateNewContext(options);
-    } catch (error) {
-      await clientCertificatesProxy?.close();
-      throw error;
-    }
+    const context = await progress.raceWithCleanup(this.doCreateNewContext(options), (context2) => context2.close({ reason: "Failed to create context" }));
     context._clientCertificatesProxy = clientCertificatesProxy;
+    if (options.__testHookBeforeSetStorageState)
+      await progress.race(options.__testHookBeforeSetStorageState());
     if (options.storageState)
-      await context.setStorageState(metadata, options.storageState);
+      await context.setStorageState(progress, options.storageState);
     this.emit(Browser.Events.Context, context);
     return context;
   }
-  async newContextForReuse(params, metadata) {
+  async newContextForReuse(progress, params) {
     const hash = import_browserContext.BrowserContext.reusableContextHash(params);
     if (!this._contextForReuse || hash !== this._contextForReuse.hash || !this._contextForReuse.context.canResetForReuse()) {
       if (this._contextForReuse)
         await this._contextForReuse.context.close({ reason: "Context reused" });
-      this._contextForReuse = { context: await this.newContext(metadata, params), hash };
-      return { context: this._contextForReuse.context, needsReset: false };
+      this._contextForReuse = { context: await this.newContext(progress, params), hash };
+      return this._contextForReuse.context;
     }
-    await this._contextForReuse.context.stopPendingOperations("Context recreated");
-    return { context: this._contextForReuse.context, needsReset: true };
+    await this._contextForReuse.context.resetForReuse(progress, params);
+    return this._contextForReuse.context;
   }
-  async stopPendingOperations(reason) {
-    await this._contextForReuse?.context?.stopPendingOperations(reason);
+  contextForReuse() {
+    return this._contextForReuse?.context;
   }
   _downloadCreated(page, uuid, url, suggestedFilename) {
     const download = new import_download.Download(page, this.options.downloadsPath || "", uuid, url, suggestedFilename);

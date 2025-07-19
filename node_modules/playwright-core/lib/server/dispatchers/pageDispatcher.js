@@ -34,7 +34,7 @@ var import_networkDispatchers = require("./networkDispatchers");
 var import_networkDispatchers2 = require("./networkDispatchers");
 var import_networkDispatchers3 = require("./networkDispatchers");
 var import_webSocketRouteDispatcher = require("./webSocketRouteDispatcher");
-var import_crypto = require("../utils/crypto");
+var import_instrumentation = require("../instrumentation");
 var import_urlMatch = require("../../utils/isomorphic/urlMatch");
 class PageDispatcher extends import_dispatcher.Dispatcher {
   constructor(parentScope, page) {
@@ -103,8 +103,8 @@ class PageDispatcher extends import_dispatcher.Dispatcher {
   page() {
     return this._page;
   }
-  async exposeBinding(params, metadata) {
-    const binding = await this._page.exposeBinding(params.name, !!params.needsHandle, (source, ...args) => {
+  async exposeBinding(params, progress) {
+    const binding = await this._page.exposeBinding(progress, params.name, !!params.needsHandle, (source, ...args) => {
       if (this._disposed)
         return;
       const binding2 = new BindingCallDispatcher(this, params.name, !!params.needsHandle, source, args);
@@ -113,35 +113,35 @@ class PageDispatcher extends import_dispatcher.Dispatcher {
     });
     this._bindings.push(binding);
   }
-  async setExtraHTTPHeaders(params, metadata) {
-    await this._page.setExtraHTTPHeaders(params.headers);
+  async setExtraHTTPHeaders(params, progress) {
+    await this._page.setExtraHTTPHeaders(progress, params.headers);
   }
-  async reload(params, metadata) {
-    return { response: import_networkDispatchers2.ResponseDispatcher.fromNullable(this.parentScope(), await this._page.reload(metadata, params)) };
+  async reload(params, progress) {
+    return { response: import_networkDispatchers2.ResponseDispatcher.fromNullable(this.parentScope(), await this._page.reload(progress, params)) };
   }
-  async goBack(params, metadata) {
-    return { response: import_networkDispatchers2.ResponseDispatcher.fromNullable(this.parentScope(), await this._page.goBack(metadata, params)) };
+  async goBack(params, progress) {
+    return { response: import_networkDispatchers2.ResponseDispatcher.fromNullable(this.parentScope(), await this._page.goBack(progress, params)) };
   }
-  async goForward(params, metadata) {
-    return { response: import_networkDispatchers2.ResponseDispatcher.fromNullable(this.parentScope(), await this._page.goForward(metadata, params)) };
+  async goForward(params, progress) {
+    return { response: import_networkDispatchers2.ResponseDispatcher.fromNullable(this.parentScope(), await this._page.goForward(progress, params)) };
   }
-  async requestGC(params, metadata) {
-    await this._page.requestGC();
+  async requestGC(params, progress) {
+    await progress.race(this._page.requestGC());
   }
-  async registerLocatorHandler(params, metadata) {
+  async registerLocatorHandler(params, progress) {
     const uid = this._page.registerLocatorHandler(params.selector, params.noWaitAfter);
     this._locatorHandlers.add(uid);
     return { uid };
   }
-  async resolveLocatorHandlerNoReply(params, metadata) {
+  async resolveLocatorHandlerNoReply(params, progress) {
     this._page.resolveLocatorHandler(params.uid, params.remove);
   }
-  async unregisterLocatorHandler(params, metadata) {
+  async unregisterLocatorHandler(params, progress) {
     this._page.unregisterLocatorHandler(params.uid);
     this._locatorHandlers.delete(params.uid);
   }
-  async emulateMedia(params, metadata) {
-    await this._page.emulateMedia({
+  async emulateMedia(params, progress) {
+    await this._page.emulateMedia(progress, {
       media: params.media,
       colorScheme: params.colorScheme,
       reducedMotion: params.reducedMotion,
@@ -149,13 +149,13 @@ class PageDispatcher extends import_dispatcher.Dispatcher {
       contrast: params.contrast
     });
   }
-  async setViewportSize(params, metadata) {
-    await this._page.setViewportSize(params.viewportSize);
+  async setViewportSize(params, progress) {
+    await this._page.setViewportSize(progress, params.viewportSize);
   }
-  async addInitScript(params, metadata) {
-    this._initScripts.push(await this._page.addInitScript(params.source));
+  async addInitScript(params, progress) {
+    this._initScripts.push(await this._page.addInitScript(progress, params.source));
   }
-  async setNetworkInterceptionPatterns(params, metadata) {
+  async setNetworkInterceptionPatterns(params, progress) {
     const hadMatchers = this._interceptionUrlMatchers.length > 0;
     if (!params.patterns.length) {
       if (hadMatchers)
@@ -164,15 +164,15 @@ class PageDispatcher extends import_dispatcher.Dispatcher {
     } else {
       this._interceptionUrlMatchers = params.patterns.map((pattern) => pattern.regexSource ? new RegExp(pattern.regexSource, pattern.regexFlags) : pattern.glob);
       if (!hadMatchers)
-        await this._page.addRequestInterceptor(this._requestInterceptor);
+        await this._page.addRequestInterceptor(progress, this._requestInterceptor);
     }
   }
-  async setWebSocketInterceptionPatterns(params, metadata) {
+  async setWebSocketInterceptionPatterns(params, progress) {
     this._webSocketInterceptionPatterns = params.patterns;
-    if (params.patterns.length)
-      await import_webSocketRouteDispatcher.WebSocketRouteDispatcher.installIfNeeded(this.connection, this._page);
+    if (params.patterns.length && !this._routeWebSocketInitScript)
+      this._routeWebSocketInitScript = await import_webSocketRouteDispatcher.WebSocketRouteDispatcher.install(progress, this.connection, this._page);
   }
-  async expectScreenshot(params, metadata) {
+  async expectScreenshot(params, progress) {
     const mask = (params.mask || []).map(({ frame, selector }) => ({
       frame: frame._object,
       selector
@@ -181,25 +181,25 @@ class PageDispatcher extends import_dispatcher.Dispatcher {
       frame: params.locator.frame._object,
       selector: params.locator.selector
     } : void 0;
-    return await this._page.expectScreenshot(metadata, {
+    return await this._page.expectScreenshot(progress, {
       ...params,
       locator,
       mask
     });
   }
-  async screenshot(params, metadata) {
+  async screenshot(params, progress) {
     const mask = (params.mask || []).map(({ frame, selector }) => ({
       frame: frame._object,
       selector
     }));
-    return { binary: await this._page.screenshot(metadata, { ...params, mask }) };
+    return { binary: await this._page.screenshot(progress, { ...params, mask }) };
   }
-  async close(params, metadata) {
+  async close(params, progress) {
     if (!params.runBeforeUnload)
-      metadata.potentiallyClosesScope = true;
-    await this._page.close(metadata, params);
+      progress.metadata.potentiallyClosesScope = true;
+    await this._page.close(params);
   }
-  async updateSubscription(params) {
+  async updateSubscription(params, progress) {
     if (params.event === "fileChooser")
       await this._page.setFileChooserInterceptedBy(params.enabled, this);
     if (params.enabled)
@@ -207,79 +207,82 @@ class PageDispatcher extends import_dispatcher.Dispatcher {
     else
       this._subscriptions.delete(params.event);
   }
-  async keyboardDown(params, metadata) {
-    await this._page.keyboard.down(params.key);
+  async keyboardDown(params, progress) {
+    await this._page.keyboard.down(progress, params.key);
   }
-  async keyboardUp(params, metadata) {
-    await this._page.keyboard.up(params.key);
+  async keyboardUp(params, progress) {
+    await this._page.keyboard.up(progress, params.key);
   }
-  async keyboardInsertText(params, metadata) {
-    await this._page.keyboard.insertText(params.text);
+  async keyboardInsertText(params, progress) {
+    await this._page.keyboard.insertText(progress, params.text);
   }
-  async keyboardType(params, metadata) {
-    await this._page.keyboard.type(params.text, params);
+  async keyboardType(params, progress) {
+    await this._page.keyboard.type(progress, params.text, params);
   }
-  async keyboardPress(params, metadata) {
-    await this._page.keyboard.press(params.key, params);
+  async keyboardPress(params, progress) {
+    await this._page.keyboard.press(progress, params.key, params);
   }
-  async mouseMove(params, metadata) {
-    await this._page.mouse.move(params.x, params.y, params, metadata);
+  async mouseMove(params, progress) {
+    progress.metadata.point = { x: params.x, y: params.y };
+    await this._page.mouse.move(progress, params.x, params.y, params);
   }
-  async mouseDown(params, metadata) {
-    await this._page.mouse.down(params, metadata);
+  async mouseDown(params, progress) {
+    progress.metadata.point = this._page.mouse.currentPoint();
+    await this._page.mouse.down(progress, params);
   }
-  async mouseUp(params, metadata) {
-    await this._page.mouse.up(params, metadata);
+  async mouseUp(params, progress) {
+    progress.metadata.point = this._page.mouse.currentPoint();
+    await this._page.mouse.up(progress, params);
   }
-  async mouseClick(params, metadata) {
-    await this._page.mouse.click(params.x, params.y, params, metadata);
+  async mouseClick(params, progress) {
+    progress.metadata.point = { x: params.x, y: params.y };
+    await this._page.mouse.click(progress, params.x, params.y, params);
   }
-  async mouseWheel(params, metadata) {
-    await this._page.mouse.wheel(params.deltaX, params.deltaY);
+  async mouseWheel(params, progress) {
+    await this._page.mouse.wheel(progress, params.deltaX, params.deltaY);
   }
-  async touchscreenTap(params, metadata) {
-    await this._page.touchscreen.tap(params.x, params.y, metadata);
+  async touchscreenTap(params, progress) {
+    progress.metadata.point = { x: params.x, y: params.y };
+    await this._page.touchscreen.tap(progress, params.x, params.y);
   }
-  async accessibilitySnapshot(params, metadata) {
-    const rootAXNode = await this._page.accessibility.snapshot({
+  async accessibilitySnapshot(params, progress) {
+    const rootAXNode = await progress.race(this._page.accessibility.snapshot({
       interestingOnly: params.interestingOnly,
       root: params.root ? params.root._elementHandle : void 0
-    });
+    }));
     return { rootAXNode: rootAXNode || void 0 };
   }
-  async pdf(params, metadata) {
+  async pdf(params, progress) {
     if (!this._page.pdf)
       throw new Error("PDF generation is only supported for Headless Chromium");
-    const buffer = await this._page.pdf(params);
+    const buffer = await progress.race(this._page.pdf(params));
     return { pdf: buffer };
   }
-  async snapshotForAI(params, metadata) {
-    return { snapshot: await this._page.snapshotForAI(metadata) };
+  async snapshotForAI(params, progress) {
+    return { snapshot: await this._page.snapshotForAI(progress) };
   }
-  async bringToFront(params, metadata) {
-    await this._page.bringToFront();
+  async bringToFront(params, progress) {
+    await progress.race(this._page.bringToFront());
   }
-  async startJSCoverage(params, metadata) {
+  async startJSCoverage(params, progress) {
+    const coverage = this._page.coverage;
+    await coverage.startJSCoverage(progress, params);
     this._jsCoverageActive = true;
-    const coverage = this._page.coverage;
-    await coverage.startJSCoverage(params);
   }
-  async stopJSCoverage(params, metadata) {
-    const coverage = this._page.coverage;
-    const result = await coverage.stopJSCoverage();
+  async stopJSCoverage(params, progress) {
     this._jsCoverageActive = false;
-    return result;
+    const coverage = this._page.coverage;
+    return await coverage.stopJSCoverage();
   }
-  async startCSSCoverage(params, metadata) {
+  async startCSSCoverage(params, progress) {
+    const coverage = this._page.coverage;
+    await coverage.startCSSCoverage(progress, params);
     this._cssCoverageActive = true;
-    const coverage = this._page.coverage;
-    await coverage.startCSSCoverage(params);
   }
-  async stopCSSCoverage(params, metadata) {
-    const coverage = this._page.coverage;
-    const result = await coverage.stopCSSCoverage();
+  async stopCSSCoverage(params, progress) {
     this._cssCoverageActive = false;
-    return result;
+    const coverage = this._page.coverage;
+    return await coverage.stopCSSCoverage();
   }
   _onFrameAttached(frame) {
     this._dispatchEvent("frameAttached", { frame: import_frameDispatcher.FrameDispatcher.from(this.parentScope(), frame) });
@@ -299,6 +302,10 @@ class PageDispatcher extends import_dispatcher.Dispatcher {
     this._page.removeInitScripts(this._initScripts).catch(() => {
     });
     this._initScripts = [];
+    if (this._routeWebSocketInitScript)
+      import_webSocketRouteDispatcher.WebSocketRouteDispatcher.uninstall(this.connection, this._page, this._routeWebSocketInitScript).catch(() => {
+      });
+    this._routeWebSocketInitScript = void 0;
     for (const uid of this._locatorHandlers)
       this._page.unregisterLocatorHandler(uid);
     this._locatorHandlers.clear();
@@ -328,17 +335,17 @@ class WorkerDispatcher extends import_dispatcher.Dispatcher {
     const result = scope.connection.existingDispatcher(worker);
     return result || new WorkerDispatcher(scope, worker);
   }
-  async evaluateExpression(params, metadata) {
-    return { value: (0, import_jsHandleDispatcher.serializeResult)(await this._object.evaluateExpression(params.expression, params.isFunction, (0, import_jsHandleDispatcher.parseArgument)(params.arg))) };
+  async evaluateExpression(params, progress) {
+    return { value: (0, import_jsHandleDispatcher.serializeResult)(await progress.race(this._object.evaluateExpression(params.expression, params.isFunction, (0, import_jsHandleDispatcher.parseArgument)(params.arg)))) };
   }
-  async evaluateExpressionHandle(params, metadata) {
-    return { handle: import_jsHandleDispatcher.JSHandleDispatcher.fromJSHandle(this, await this._object.evaluateExpressionHandle(params.expression, params.isFunction, (0, import_jsHandleDispatcher.parseArgument)(params.arg))) };
+  async evaluateExpressionHandle(params, progress) {
+    return { handle: import_jsHandleDispatcher.JSHandleDispatcher.fromJSHandle(this, await progress.race(this._object.evaluateExpressionHandle(params.expression, params.isFunction, (0, import_jsHandleDispatcher.parseArgument)(params.arg)))) };
   }
 }
 class BindingCallDispatcher extends import_dispatcher.Dispatcher {
   constructor(scope, name, needsHandle, source, args) {
     const frameDispatcher = import_frameDispatcher.FrameDispatcher.from(scope.parentScope(), source.frame);
-    super(scope, { guid: "bindingCall@" + (0, import_crypto.createGuid)() }, "BindingCall", {
+    super(scope, new import_instrumentation.SdkObject(scope._object, "bindingCall"), "BindingCall", {
       frame: frameDispatcher,
       name,
       args: needsHandle ? void 0 : args.map(import_jsHandleDispatcher.serializeResult),
@@ -353,11 +360,11 @@ class BindingCallDispatcher extends import_dispatcher.Dispatcher {
   promise() {
     return this._promise;
   }
-  async resolve(params, metadata) {
+  async resolve(params, progress) {
     this._resolve((0, import_jsHandleDispatcher.parseArgument)(params.result));
     this._dispose();
   }
-  async reject(params, metadata) {
+  async reject(params, progress) {
     this._reject((0, import_errors.parseError)(params.error));
     this._dispose();
   }

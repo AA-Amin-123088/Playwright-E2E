@@ -210,7 +210,7 @@ class CRPage {
     await this._mainFrameSession._client.send("Emulation.setDefaultBackgroundColorOverride", { color });
   }
   async takeScreenshot(progress, format, documentRect, viewportRect, quality, fitsViewport, scale) {
-    const { visualViewport } = await this._mainFrameSession._client.send("Page.getLayoutMetrics");
+    const { visualViewport } = await progress.race(this._mainFrameSession._client.send("Page.getLayoutMetrics"));
     if (!documentRect) {
       documentRect = {
         x: visualViewport.pageX + viewportRect.x,
@@ -226,8 +226,7 @@ class CRPage {
       const deviceScaleFactor = this._browserContext._options.deviceScaleFactor || 1;
       clip.scale /= deviceScaleFactor;
     }
-    progress.throwIfAborted();
-    const result = await this._mainFrameSession._client.send("Page.captureScreenshot", { format, quality, clip, captureBeyondViewport: !fitsViewport });
+    const result = await progress.race(this._mainFrameSession._client.send("Page.captureScreenshot", { format, quality, clip, captureBeyondViewport: !fitsViewport }));
     return Buffer.from(result.data, "base64");
   }
   async getContentFrame(handle) {
@@ -280,8 +279,8 @@ class CRPage {
     await this._mainFrameSession._client.send("Page.enable").catch((e) => {
     });
   }
-  async resetForReuse() {
-    await this.rawMouse.move(-1, -1, "none", /* @__PURE__ */ new Set(), /* @__PURE__ */ new Set(), true);
+  async resetForReuse(progress) {
+    await this.rawMouse.move(progress, -1, -1, "none", /* @__PURE__ */ new Set(), /* @__PURE__ */ new Set(), true);
   }
   async pdf(options) {
     return this._pdf.generate(options);
@@ -736,7 +735,7 @@ class FrameSession {
   }
   async _createVideoRecorder(screencastId, options) {
     (0, import_assert.assert)(!this._screencastId);
-    const ffmpegPath = import_registry.registry.findExecutable("ffmpeg").executablePathOrDie(this._page.attribution.playwright.options.sdkLanguage);
+    const ffmpegPath = import_registry.registry.findExecutable("ffmpeg").executablePathOrDie(this._page.browserContext._browser.sdkLanguage());
     this._videoRecorder = await import_videoRecorder.VideoRecorder.launch(this._crPage._page, ffmpegPath, options);
     this._screencastId = screencastId;
   }

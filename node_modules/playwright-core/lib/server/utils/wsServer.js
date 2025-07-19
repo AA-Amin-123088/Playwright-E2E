@@ -43,16 +43,7 @@ class WSServer {
   }
   async listen(port = 0, hostname, path) {
     import_debugLogger.debugLogger.log("server", `Server started at ${/* @__PURE__ */ new Date()}`);
-    const server = (0, import_network.createHttpServer)((request, response) => {
-      if (request.method === "GET" && request.url === "/json") {
-        response.setHeader("Content-Type", "application/json");
-        response.end(JSON.stringify({
-          wsEndpointPath: path
-        }));
-        return;
-      }
-      response.end("Running");
-    });
+    const server = (0, import_network.createHttpServer)(this._delegate.onRequest);
     server.on("error", (error) => import_debugLogger.debugLogger.log("server", String(error)));
     this.server = server;
     const wsEndpoint = await new Promise((resolve, reject) => {
@@ -71,8 +62,7 @@ class WSServer {
       noServer: true,
       perMessageDeflate
     });
-    if (this._delegate.onHeaders)
-      this._wsServer.on("headers", (headers) => this._delegate.onHeaders(headers));
+    this._wsServer.on("headers", (headers) => this._delegate.onHeaders(headers));
     server.on("upgrade", (request, socket, head) => {
       const pathname = new URL("http://localhost" + request.url).pathname;
       if (pathname !== path) {
@@ -82,13 +72,13 @@ class WSServer {
         socket.destroy();
         return;
       }
-      const upgradeResult = this._delegate.onUpgrade?.(request, socket);
+      const upgradeResult = this._delegate.onUpgrade(request, socket);
       if (upgradeResult) {
         socket.write(upgradeResult.error);
         socket.destroy();
         return;
       }
-      this._wsServer?.handleUpgrade(request, socket, head, (ws) => this._wsServer?.emit("connection", ws, request));
+      this._wsServer.handleUpgrade(request, socket, head, (ws) => this._wsServer.emit("connection", ws, request));
     });
     this._wsServer.on("connection", (ws, request) => {
       import_debugLogger.debugLogger.log("server", "Connected client ws.extension=" + ws.extensions);
@@ -122,7 +112,6 @@ class WSServer {
     this._wsServer = void 0;
     this.server = void 0;
     import_debugLogger.debugLogger.log("server", "closed server");
-    await this._delegate.onClose?.();
   }
 }
 // Annotate the CommonJS export names for ESM import in node:

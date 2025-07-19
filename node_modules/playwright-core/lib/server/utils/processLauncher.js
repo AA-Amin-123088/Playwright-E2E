@@ -132,7 +132,7 @@ async function launchProcess(options) {
     spawnedProcess.once("error", (error) => {
       failed(new Error("Failed to launch: " + error));
     });
-    return cleanup().then(() => failedPromise).then((e) => Promise.reject(e));
+    return failedPromise.then((e) => Promise.reject(e));
   }
   options.log(`<launched> pid=${spawnedProcess.pid}`);
   const stdout = readline.createInterface({ input: spawnedProcess.stdout });

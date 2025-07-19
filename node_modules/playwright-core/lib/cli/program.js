@@ -50,7 +50,7 @@ import_utilsBundle.program.command("mark-docker-image [dockerImageNameTemplate]"
   (0, import_server.writeDockerVersion)(dockerImageNameTemplate).catch(logErrorAndExit);
 });
 commandWithOpenOptions("open [url]", "open page in browser specified via -b, --browser", []).action(function(url, options) {
-  open(options, url, codegenId()).catch(logErrorAndExit);
+  open(options, url).catch(logErrorAndExit);
 }).addHelpText("afterAll", `
 Examples:
 
@@ -65,7 +65,12 @@ commandWithOpenOptions(
     ["--test-id-attribute <attributeName>", "use the specified attribute to generate data test ID selectors"]
   ]
 ).action(function(url, options) {
-  codegen(options, url).catch(logErrorAndExit);
+  codegen(options, url).catch((error) => {
+    if (process.env.PWTEST_CLI_AUTO_EXIT_WHEN) {
+    } else {
+      throw error;
+    }
+  });
 }).addHelpText("afterAll", `
 Examples:
 
@@ -267,7 +272,7 @@ const browsers = [
 ];
 for (const { alias, name, type } of browsers) {
   commandWithOpenOptions(`${alias} [url]`, `open page in ${name}`, []).action(function(url, options) {
-    open({ ...options, browser: type }, url, options.target).catch(logErrorAndExit);
+    open({ ...options, browser: type }, url).catch(logErrorAndExit);
   }).addHelpText("afterAll", `
 Examples:
 
@@ -367,30 +372,6 @@ async function launchContext(options, extraOptions) {
     if (options.proxyBypass)
       launchOptions.proxy.bypass = options.proxyBypass;
   }
-  const browser = await browserType.launch(launchOptions);
-  if (process.env.PWTEST_CLI_IS_UNDER_TEST) {
-    process._didSetSourcesForTest = (text) => {
-      process.stdout.write("\n-------------8<-------------\n");
-      process.stdout.write(text);
-      process.stdout.write("\n-------------8<-------------\n");
-      const autoExitCondition = process.env.PWTEST_CLI_AUTO_EXIT_WHEN;
-      if (autoExitCondition && text.includes(autoExitCondition))
-        closeBrowser();
-    };
-    const logs = [];
-    require("playwright-core/lib/utilsBundle").debug.log = (...args) => {
-      const line = require("util").format(...args) + "\n";
-      logs.push(line);
-      process.stderr.write(line);
-    };
-    browser.on("disconnected", () => {
-      const hasCrashLine = logs.some((line) => line.includes("process did exit:") && !line.includes("process did exit: exitCode=0, signal=null"));
-      if (hasCrashLine) {
-        process.stderr.write("Detected browser crash.\n");
-        (0, import_utils.gracefullyProcessExitDoNotHang)(1);
-      }
-    });
-  }
   if (options.viewportSize) {
     try {
       const [width, height] = options.viewportSize.split(",").map((n) => +n);
@@ -431,7 +412,38 @@ async function launchContext(options, extraOptions) {
       contextOptions.recordHar.urlFilter = options.saveHarGlob;
     contextOptions.serviceWorkers = "block";
   }
-  const context = await browser.newContext(contextOptions);
+  let browser;
+  let context;
+  if (options.userDataDir) {
+    context = await browserType.launchPersistentContext(options.userDataDir, { ...launchOptions, ...contextOptions });
+    browser = context.browser();
+  } else {
+    browser = await browserType.launch(launchOptions);
+    context = await browser.newContext(contextOptions);
+  }
+  if (process.env.PWTEST_CLI_IS_UNDER_TEST) {
+    process._didSetSourcesForTest = (text) => {
+      process.stdout.write("\n-------------8<-------------\n");
+      process.stdout.write(text);
+      process.stdout.write("\n-------------8<-------------\n");
+      const autoExitCondition = process.env.PWTEST_CLI_AUTO_EXIT_WHEN;
+      if (autoExitCondition && text.includes(autoExitCondition))
+        closeBrowser();
+    };
+    const logs = [];
+    require("playwright-core/lib/utilsBundle").debug.log = (...args) => {
+      const line = require("util").format(...args) + "\n";
+      logs.push(line);
+      process.stderr.write(line);
+    };
+    browser.on("disconnected", () => {
+      const hasCrashLine = logs.some((line) => line.includes("process did exit:") && !line.includes("process did exit: exitCode=0, signal=null"));
+      if (hasCrashLine) {
+        process.stderr.write("Detected browser crash.\n");
+        (0, import_utils.gracefullyProcessExitDoNotHang)(1);
+      }
+    });
+  }
   let closingBrowser = false;
   async function closeBrowser() {
     if (closingBrowser)
@@ -468,31 +480,20 @@ async function launchContext(options, extraOptions) {
   return { browser, browserName: browserType.name(), context, contextOptions, launchOptions };
 }
 async function openPage(context, url) {
-  const page = await context.newPage();
+  let page = context.pages()[0];
+  if (!page)
+    page = await context.newPage();
   if (url) {
     if (import_fs.default.existsSync(url))
       url = "file://" + import_path.default.resolve(url);
     else if (!url.startsWith("http") && !url.startsWith("file://") && !url.startsWith("about:") && !url.startsWith("data:"))
       url = "http://" + url;
-    await page.goto(url).catch((error) => {
-      if (process.env.PWTEST_CLI_AUTO_EXIT_WHEN) {
-      } else {
-        throw error;
-      }
-    });
+    await page.goto(url);
   }
   return page;
 }
-async function open(options, url, language) {
-  const { context, launchOptions, contextOptions } = await launchContext(options, { headless: !!process.env.PWTEST_CLI_HEADLESS, executablePath: process.env.PWTEST_CLI_EXECUTABLE_PATH });
-  await context._enableRecorder({
-    language,
-    launchOptions,
-    contextOptions,
-    device: options.device,
-    saveStorage: options.saveStorage,
-    handleSIGINT: false
-  });
+async function open(options, url) {
+  const { context } = await launchContext(options, { headless: !!process.env.PWTEST_CLI_HEADLESS, executablePath: process.env.PWTEST_CLI_EXECUTABLE_PATH });
   await openPage(context, url);
 }
 async function codegen(options, url) {
@@ -602,7 +603,7 @@ function commandWithOpenOptions(command, description, options) {
   let result = import_utilsBundle.program.command(command).description(description);
   for (const option of options)
     result = result.option(option[0], ...option.slice(1));
-  return result.option("-b, --browser <browserType>", "browser to use, one of cr, chromium, ff, firefox, wk, webkit", "chromium").option("--block-service-workers", "block service workers").option("--channel <channel>", 'Chromium distribution channel, "chrome", "chrome-beta", "msedge-dev", etc').option("--color-scheme <scheme>", 'emulate preferred color scheme, "light" or "dark"').option("--device <deviceName>", 'emulate device, for example  "iPhone 11"').option("--geolocation <coordinates>", 'specify geolocation coordinates, for example "37.819722,-122.478611"').option("--ignore-https-errors", "ignore https errors").option("--load-storage <filename>", "load context storage state from the file, previously saved with --save-storage").option("--lang <language>", 'specify language / locale, for example "en-GB"').option("--proxy-server <proxy>", 'specify proxy server, for example "http://myproxy:3128" or "socks5://myproxy:8080"').option("--proxy-bypass <bypass>", 'comma-separated domains to bypass proxy, for example ".com,chromium.org,.domain.com"').option("--save-har <filename>", "save HAR file with all network activity at the end").option("--save-har-glob <glob pattern>", "filter entries in the HAR by matching url against this glob pattern").option("--save-storage <filename>", "save context storage state at the end, for later use with --load-storage").option("--timezone <time zone>", 'time zone to emulate, for example "Europe/Rome"').option("--timeout <timeout>", "timeout for Playwright actions in milliseconds, no timeout by default").option("--user-agent <ua string>", "specify user agent string").option("--viewport-size <size>", 'specify browser viewport size in pixels, for example "1280, 720"');
+  return result.option("-b, --browser <browserType>", "browser to use, one of cr, chromium, ff, firefox, wk, webkit", "chromium").option("--block-service-workers", "block service workers").option("--channel <channel>", 'Chromium distribution channel, "chrome", "chrome-beta", "msedge-dev", etc').option("--color-scheme <scheme>", 'emulate preferred color scheme, "light" or "dark"').option("--device <deviceName>", 'emulate device, for example  "iPhone 11"').option("--geolocation <coordinates>", 'specify geolocation coordinates, for example "37.819722,-122.478611"').option("--ignore-https-errors", "ignore https errors").option("--load-storage <filename>", "load context storage state from the file, previously saved with --save-storage").option("--lang <language>", 'specify language / locale, for example "en-GB"').option("--proxy-server <proxy>", 'specify proxy server, for example "http://myproxy:3128" or "socks5://myproxy:8080"').option("--proxy-bypass <bypass>", 'comma-separated domains to bypass proxy, for example ".com,chromium.org,.domain.com"').option("--save-har <filename>", "save HAR file with all network activity at the end").option("--save-har-glob <glob pattern>", "filter entries in the HAR by matching url against this glob pattern").option("--save-storage <filename>", "save context storage state at the end, for later use with --load-storage").option("--timezone <time zone>", 'time zone to emulate, for example "Europe/Rome"').option("--timeout <timeout>", "timeout for Playwright actions in milliseconds, no timeout by default").option("--user-agent <ua string>", "specify user agent string").option("--user-data-dir <directory>", "use the specified user data directory instead of a new context").option("--viewport-size <size>", 'specify browser viewport size in pixels, for example "1280, 720"');
 }
 function buildBasePlaywrightCLICommand(cliTargetLang) {
   switch (cliTargetLang) {

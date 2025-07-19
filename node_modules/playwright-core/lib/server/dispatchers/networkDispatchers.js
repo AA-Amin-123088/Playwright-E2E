@@ -58,11 +58,11 @@ class RequestDispatcher extends import_dispatcher.Dispatcher {
     this._type_Request = true;
     this._browserContextDispatcher = scope;
   }
-  async rawRequestHeaders(params) {
-    return { headers: await this._object.rawRequestHeaders() };
+  async rawRequestHeaders(params, progress) {
+    return { headers: await progress.race(this._object.rawRequestHeaders()) };
   }
-  async response() {
-    return { response: ResponseDispatcher.fromNullable(this._browserContextDispatcher, await this._object.response()) };
+  async response(params, progress) {
+    return { response: ResponseDispatcher.fromNullable(this._browserContextDispatcher, await progress.race(this._object.response())) };
   }
 }
 class ResponseDispatcher extends import_dispatcher.Dispatcher {
@@ -87,20 +87,20 @@ class ResponseDispatcher extends import_dispatcher.Dispatcher {
   static fromNullable(scope, response) {
     return response ? ResponseDispatcher.from(scope, response) : void 0;
   }
-  async body() {
-    return { binary: await this._object.body() };
+  async body(params, progress) {
+    return { binary: await progress.race(this._object.body()) };
   }
-  async securityDetails() {
-    return { value: await this._object.securityDetails() || void 0 };
+  async securityDetails(params, progress) {
+    return { value: await progress.race(this._object.securityDetails()) || void 0 };
   }
-  async serverAddr() {
-    return { value: await this._object.serverAddr() || void 0 };
+  async serverAddr(params, progress) {
+    return { value: await progress.race(this._object.serverAddr()) || void 0 };
   }
-  async rawResponseHeaders(params) {
-    return { headers: await this._object.rawResponseHeaders() };
+  async rawResponseHeaders(params, progress) {
+    return { headers: await progress.race(this._object.rawResponseHeaders()) };
   }
-  async sizes(params) {
-    return { sizes: await this._object.sizes() };
+  async sizes(params, progress) {
+    return { sizes: await progress.race(this._object.sizes()) };
   }
 }
 class RouteDispatcher extends import_dispatcher.Dispatcher {
@@ -117,7 +117,7 @@ class RouteDispatcher extends import_dispatcher.Dispatcher {
       throw new Error("Route is already handled!");
     this._handled = true;
   }
-  async continue(params, metadata) {
+  async continue(params, progress) {
     this._checkNotHandled();
     await this._object.continue({
       url: params.url,
@@ -127,17 +127,17 @@ class RouteDispatcher extends import_dispatcher.Dispatcher {
       isFallback: params.isFallback
     });
   }
-  async fulfill(params, metadata) {
+  async fulfill(params, progress) {
     this._checkNotHandled();
     await this._object.fulfill(params);
   }
-  async abort(params, metadata) {
+  async abort(params, progress) {
     this._checkNotHandled();
     await this._object.abort(params.errorCode || "failed");
   }
-  async redirectNavigationRequest(params) {
+  async redirectNavigationRequest(params, progress) {
     this._checkNotHandled();
-    await this._object.redirectNavigationRequest(params.url);
+    this._object.redirectNavigationRequest(params.url);
   }
 }
 class WebSocketDispatcher extends import_dispatcher.Dispatcher {
@@ -169,16 +169,16 @@ class APIRequestContextDispatcher extends import_dispatcher.Dispatcher {
   static fromNullable(scope, request) {
     return request ? APIRequestContextDispatcher.from(scope, request) : void 0;
   }
-  async storageState(params) {
-    return this._object.storageState(params.indexedDB);
+  async storageState(params, progress) {
+    return await this._object.storageState(progress, params.indexedDB);
   }
-  async dispose(params, metadata) {
-    metadata.potentiallyClosesScope = true;
+  async dispose(params, progress) {
+    progress.metadata.potentiallyClosesScope = true;
     await this._object.dispose(params);
     this._dispose();
   }
-  async fetch(params, metadata) {
-    const fetchResponse = await this._object.fetch(params, metadata);
+  async fetch(params, progress) {
+    const fetchResponse = await this._object.fetch(progress, params);
     return {
       response: {
         url: fetchResponse.url,
@@ -189,14 +189,14 @@ class APIRequestContextDispatcher extends import_dispatcher.Dispatcher {
       }
     };
   }
-  async fetchResponseBody(params) {
+  async fetchResponseBody(params, progress) {
     return { binary: this._object.fetchResponses.get(params.fetchUid) };
   }
-  async fetchLog(params) {
+  async fetchLog(params, progress) {
     const log = this._object.fetchLog.get(params.fetchUid) || [];
     return { log };
   }
-  async disposeAPIResponse(params) {
+  async disposeAPIResponse(params, progress) {
     this._object.disposeResponse(params.fetchUid);
   }
 }

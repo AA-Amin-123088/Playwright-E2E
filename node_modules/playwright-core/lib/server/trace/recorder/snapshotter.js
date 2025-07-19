@@ -51,11 +51,12 @@ class Snapshotter {
     if (this._started)
       await this._context.safeNonStallingEvaluateInAllFrames(`window["${this._snapshotStreamer}"].reset()`, "main");
   }
-  async stop() {
+  stop() {
     this._started = false;
   }
   async resetForReuse() {
     if (this._initScript) {
+      import_eventsHelper.eventsHelper.removeEventListeners(this._eventListeners);
       await this._context.removeInitScripts([this._initScript]);
       this._initScript = void 0;
     }
@@ -68,7 +69,7 @@ class Snapshotter {
     ];
     const { javaScriptEnabled } = this._context._options;
     const initScriptSource = `(${import_snapshotterInjected.frameSnapshotStreamer})("${this._snapshotStreamer}", ${javaScriptEnabled || javaScriptEnabled === void 0})`;
-    this._initScript = await this._context.addInitScript(initScriptSource);
+    this._initScript = await this._context.addInitScript(void 0, initScriptSource);
     await this._context.safeNonStallingEvaluateInAllFrames(initScriptSource, "main");
   }
   dispose() {

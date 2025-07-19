@@ -25,7 +25,6 @@ __export(locator_exports, {
 });
 module.exports = __toCommonJS(locator_exports);
 var import_elementHandle = require("./elementHandle");
-var import_jsHandle = require("./jsHandle");
 var import_locatorGenerators = require("../utils/isomorphic/locatorGenerators");
 var import_locatorUtils = require("../utils/isomorphic/locatorUtils");
 var import_stringUtils = require("../utils/isomorphic/stringUtils");
@@ -111,7 +110,7 @@ class Locator {
     return await this._frame.fill(this._selector, value, { strict: true, ...options });
   }
   async clear(options = {}) {
-    return await this.fill("", options);
+    await this._frame._wrapApiCall(() => this.fill("", options), { title: "Clear" });
   }
   async _highlight() {
     return await this._frame._highlight(this._selector);
@@ -194,7 +193,8 @@ class Locator {
     return await this._frame._queryCount(this._selector);
   }
   async _generateLocatorString() {
-    return await this._withElement((h) => h._generateLocatorString(), { title: "Generate locator string", internal: true });
+    const { value } = await this._frame._channel.generateLocatorString({ selector: this._selector });
+    return value === void 0 ? null : value;
   }
   async getAttribute(name, options) {
     return await this._frame.getAttribute(this._selector, name, { strict: true, ...options });
@@ -286,12 +286,10 @@ class Locator {
     await this._frame._channel.waitForSelector({ selector: this._selector, strict: true, omitReturnValue: true, ...options, timeout: this._frame._timeout(options) });
   }
   async _expect(expression, options) {
-    const params = { selector: this._selector, expression, ...options, isNot: !!options.isNot };
-    params.expectedValue = (0, import_jsHandle.serializeArgument)(options.expectedValue);
-    const result = await this._frame._channel.expect(params);
-    if (result.received !== void 0)
-      result.received = (0, import_jsHandle.parseResult)(result.received);
-    return result;
+    return this._frame._expect(expression, {
+      ...options,
+      selector: this._selector
+    });
   }
   _inspect() {
     return this.toString();

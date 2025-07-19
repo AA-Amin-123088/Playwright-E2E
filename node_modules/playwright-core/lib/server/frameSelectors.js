@@ -102,7 +102,7 @@ class FrameSelectors {
     for (const chunk of frameChunks) {
       (0, import_selectorParser.visitAllSelectorParts)(chunk, (part, nested) => {
         if (nested && part.name === "internal:control" && part.body === "enter-frame") {
-          const locator = (0, import_utils.asLocator)(this.frame._page.attribution.playwright.options.sdkLanguage, selector);
+          const locator = (0, import_utils.asLocator)(this.frame._page.browserContext._browser.sdkLanguage(), selector);
           throw new import_selectorParser.InvalidSelectorError(`Frame locators are not allowed inside composite locators, while querying "${locator}"`);
         }
       });

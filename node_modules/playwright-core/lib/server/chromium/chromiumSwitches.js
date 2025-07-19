@@ -90,6 +90,8 @@ const chromiumSwitches = (assistantMode, channel) => [
   "--disable-search-engine-choice-screen",
   // https://issues.chromium.org/41491762
   "--unsafely-disable-devtools-self-xss-warnings",
+  // Edge can potentially restart on Windows (msRelaunchNoCompatLayer) which looses its file descriptors (stdout/stderr) and CDP (3/4). Disable until fixed upstream.
+  "--edge-skip-compat-layer-relaunch",
   assistantMode ? "" : "--enable-automation"
 ].filter(Boolean);
 // Annotate the CommonJS export names for ESM import in node:

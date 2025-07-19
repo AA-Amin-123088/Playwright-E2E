@@ -45,12 +45,12 @@ var import_networkDispatchers = require("./networkDispatchers");
 var import_pageDispatcher = require("./pageDispatcher");
 var import_crBrowser = require("../chromium/crBrowser");
 var import_errors = require("../errors");
-var import_recorder = require("../recorder");
 var import_tracingDispatcher = require("./tracingDispatcher");
 var import_webSocketRouteDispatcher = require("./webSocketRouteDispatcher");
 var import_writableStreamDispatcher = require("./writableStreamDispatcher");
 var import_crypto = require("../utils/crypto");
 var import_urlMatch = require("../../utils/isomorphic/urlMatch");
+var import_recorder = require("../recorder");
 var import_recorderApp = require("../recorder/recorderApp");
 class BrowserContextDispatcher extends import_dispatcher.Dispatcher {
   constructor(parentScope, context) {
@@ -67,7 +67,7 @@ class BrowserContextDispatcher extends import_dispatcher.Dispatcher {
     this._subscriptions = /* @__PURE__ */ new Set();
     this._webSocketInterceptionPatterns = [];
     this._bindings = [];
-    this._initScritps = [];
+    this._initScripts = [];
     this._clockPaused = false;
     this._interceptionUrlMatchers = [];
     this.adopt(requestContext);
@@ -178,6 +178,9 @@ class BrowserContextDispatcher extends import_dispatcher.Dispatcher {
         page: import_pageDispatcher.PageDispatcher.fromNullable(this, request.frame()?._page.initializedOrUndefined())
       });
     });
+    this.addObjectListener(import_browserContext.BrowserContext.Events.RecorderEvent, ({ event, data, page }) => {
+      this._dispatchEvent("recorderEvent", { event, data, page: import_pageDispatcher.PageDispatcher.from(this, page) });
+    });
   }
   static from(parentScope, context) {
     const result = parentScope.connection.existingDispatcher(context);
@@ -194,23 +197,23 @@ class BrowserContextDispatcher extends import_dispatcher.Dispatcher {
       return true;
     return false;
   }
-  async createTempFiles(params) {
+  async createTempFiles(params, progress) {
     const dir = this._context._browser.options.artifactsDir;
     const tmpDir = import_path.default.join(dir, "upload-" + (0, import_crypto.createGuid)());
     const tempDirWithRootName = params.rootDirName ? import_path.default.join(tmpDir, import_path.default.basename(params.rootDirName)) : tmpDir;
-    await import_fs.default.promises.mkdir(tempDirWithRootName, { recursive: true });
+    await progress.race(import_fs.default.promises.mkdir(tempDirWithRootName, { recursive: true }));
     this._context._tempDirs.push(tmpDir);
     return {
       rootDir: params.rootDirName ? new import_writableStreamDispatcher.WritableStreamDispatcher(this, tempDirWithRootName) : void 0,
       writableStreams: await Promise.all(params.items.map(async (item) => {
-        await import_fs.default.promises.mkdir(import_path.default.dirname(import_path.default.join(tempDirWithRootName, item.name)), { recursive: true });
+        await progress.race(import_fs.default.promises.mkdir(import_path.default.dirname(import_path.default.join(tempDirWithRootName, item.name)), { recursive: true }));
         const file = import_fs.default.createWriteStream(import_path.default.join(tempDirWithRootName, item.name));
         return new import_writableStreamDispatcher.WritableStreamDispatcher(this, file, item.lastModifiedMs);
       }))
     };
   }
-  async exposeBinding(params) {
-    const binding = await this._context.exposeBinding(params.name, !!params.needsHandle, (source, ...args) => {
+  async exposeBinding(params, progress) {
+    const binding = await this._context.exposeBinding(progress, params.name, !!params.needsHandle, (source, ...args) => {
       if (this._disposed)
         return;
       const pageDispatcher = import_pageDispatcher.PageDispatcher.from(this, source.page);
@@ -220,16 +223,20 @@ class BrowserContextDispatcher extends import_dispatcher.Dispatcher {
     });
     this._bindings.push(binding);
   }
-  async newPage(params, metadata) {
-    return { page: import_pageDispatcher.PageDispatcher.from(this, await this._context.newPage(metadata)) };
+  async newPage(params, progress) {
+    return { page: import_pageDispatcher.PageDispatcher.from(this, await this._context.newPage(
+      progress,
+      false
+      /* isServerSide */
+    )) };
   }
-  async cookies(params) {
-    return { cookies: await this._context.cookies(params.urls) };
+  async cookies(params, progress) {
+    return { cookies: await progress.race(this._context.cookies(params.urls)) };
   }
-  async addCookies(params) {
+  async addCookies(params, progress) {
     await this._context.addCookies(params.cookies);
   }
-  async clearCookies(params) {
+  async clearCookies(params, progress) {
     const nameRe = params.nameRegexSource !== void 0 && params.nameRegexFlags !== void 0 ? new RegExp(params.nameRegexSource, params.nameRegexFlags) : void 0;
     const domainRe = params.domainRegexSource !== void 0 && params.domainRegexFlags !== void 0 ? new RegExp(params.domainRegexSource, params.domainRegexFlags) : void 0;
     const pathRe = params.pathRegexSource !== void 0 && params.pathRegexFlags !== void 0 ? new RegExp(params.pathRegexSource, params.pathRegexFlags) : void 0;
@@ -239,28 +246,28 @@ class BrowserContextDispatcher extends import_dispatcher.Dispatcher {
       path: pathRe || params.path
     });
   }
-  async grantPermissions(params) {
+  async grantPermissions(params, progress) {
     await this._context.grantPermissions(params.permissions, params.origin);
   }
-  async clearPermissions() {
+  async clearPermissions(params, progress) {
     await this._context.clearPermissions();
   }
-  async setGeolocation(params) {
+  async setGeolocation(params, progress) {
     await this._context.setGeolocation(params.geolocation);
   }
-  async setExtraHTTPHeaders(params) {
-    await this._context.setExtraHTTPHeaders(params.headers);
+  async setExtraHTTPHeaders(params, progress) {
+    await this._context.setExtraHTTPHeaders(progress, params.headers);
   }
-  async setOffline(params) {
-    await this._context.setOffline(params.offline);
+  async setOffline(params, progress) {
+    await this._context.setOffline(progress, params.offline);
   }
-  async setHTTPCredentials(params) {
-    await this._context.setHTTPCredentials(params.httpCredentials);
+  async setHTTPCredentials(params, progress) {
+    await progress.race(this._context.setHTTPCredentials(params.httpCredentials));
   }
-  async addInitScript(params) {
-    this._initScritps.push(await this._context.addInitScript(params.source));
+  async addInitScript(params, progress) {
+    this._initScripts.push(await this._context.addInitScript(progress, params.source));
   }
-  async setNetworkInterceptionPatterns(params) {
+  async setNetworkInterceptionPatterns(params, progress) {
     const hadMatchers = this._interceptionUrlMatchers.length > 0;
     if (!params.patterns.length) {
       if (hadMatchers)
@@ -269,77 +276,87 @@ class BrowserContextDispatcher extends import_dispatcher.Dispatcher {
     } else {
       this._interceptionUrlMatchers = params.patterns.map((pattern) => pattern.regexSource ? new RegExp(pattern.regexSource, pattern.regexFlags) : pattern.glob);
       if (!hadMatchers)
-        await this._context.addRequestInterceptor(this._requestInterceptor);
+        await this._context.addRequestInterceptor(progress, this._requestInterceptor);
     }
   }
-  async setWebSocketInterceptionPatterns(params, metadata) {
+  async setWebSocketInterceptionPatterns(params, progress) {
     this._webSocketInterceptionPatterns = params.patterns;
-    if (params.patterns.length)
-      await import_webSocketRouteDispatcher.WebSocketRouteDispatcher.installIfNeeded(this.connection, this._context);
+    if (params.patterns.length && !this._routeWebSocketInitScript)
+      this._routeWebSocketInitScript = await import_webSocketRouteDispatcher.WebSocketRouteDispatcher.install(progress, this.connection, this._context);
   }
-  async storageState(params, metadata) {
-    return await this._context.storageState(params.indexedDB);
+  async storageState(params, progress) {
+    return await progress.race(this._context.storageState(progress, params.indexedDB));
   }
-  async close(params, metadata) {
-    metadata.potentiallyClosesScope = true;
+  async close(params, progress) {
+    progress.metadata.potentiallyClosesScope = true;
     await this._context.close(params);
   }
-  async enableRecorder(params) {
-    await import_recorder.Recorder.show(this._context, import_recorderApp.RecorderApp.factory(this._context), params);
+  async enableRecorder(params, progress) {
+    const recorder = await import_recorder.Recorder.forContext(this._context, params);
+    if (params.recorderMode === "api") {
+      await import_recorderApp.ProgrammaticRecorderApp.run(this._context, recorder);
+      return;
+    }
+    await import_recorderApp.RecorderApp.show(this._context, params);
   }
-  async pause(params, metadata) {
+  async disableRecorder(params, progress) {
+    const recorder = import_recorder.Recorder.existingForContext(this._context);
+    if (recorder)
+      recorder.setMode("none");
   }
-  async newCDPSession(params) {
+  async pause(params, progress) {
+  }
+  async newCDPSession(params, progress) {
     if (!this._object._browser.options.isChromium)
       throw new Error(`CDP session is only available in Chromium`);
     if (!params.page && !params.frame || params.page && params.frame)
       throw new Error(`CDP session must be initiated with either Page or Frame, not none or both`);
     const crBrowserContext = this._object;
-    return { session: new import_cdpSessionDispatcher.CDPSessionDispatcher(this, await crBrowserContext.newCDPSession((params.page ? params.page : params.frame)._object)) };
+    return { session: new import_cdpSessionDispatcher.CDPSessionDispatcher(this, await progress.race(crBrowserContext.newCDPSession((params.page ? params.page : params.frame)._object))) };
   }
-  async harStart(params) {
-    const harId = await this._context._harStart(params.page ? params.page._object : null, params.options);
+  async harStart(params, progress) {
+    const harId = this._context.harStart(params.page ? params.page._object : null, params.options);
     return { harId };
   }
-  async harExport(params) {
-    const artifact = await this._context._harExport(params.harId);
+  async harExport(params, progress) {
+    const artifact = await progress.race(this._context.harExport(params.harId));
     if (!artifact)
       throw new Error("No HAR artifact. Ensure record.harPath is set.");
     return { artifact: import_artifactDispatcher.ArtifactDispatcher.from(this, artifact) };
   }
-  async clockFastForward(params, metadata) {
-    await this._context.clock.fastForward(params.ticksString ?? params.ticksNumber ?? 0);
+  async clockFastForward(params, progress) {
+    await this._context.clock.fastForward(progress, params.ticksString ?? params.ticksNumber ?? 0);
   }
-  async clockInstall(params, metadata) {
-    await this._context.clock.install(params.timeString ?? params.timeNumber ?? void 0);
+  async clockInstall(params, progress) {
+    await this._context.clock.install(progress, params.timeString ?? params.timeNumber ?? void 0);
   }
-  async clockPauseAt(params, metadata) {
-    await this._context.clock.pauseAt(params.timeString ?? params.timeNumber ?? 0);
+  async clockPauseAt(params, progress) {
+    await this._context.clock.pauseAt(progress, params.timeString ?? params.timeNumber ?? 0);
     this._clockPaused = true;
   }
-  async clockResume(params, metadata) {
-    await this._context.clock.resume();
+  async clockResume(params, progress) {
+    await this._context.clock.resume(progress);
     this._clockPaused = false;
   }
-  async clockRunFor(params, metadata) {
-    await this._context.clock.runFor(params.ticksString ?? params.ticksNumber ?? 0);
+  async clockRunFor(params, progress) {
+    await this._context.clock.runFor(progress, params.ticksString ?? params.ticksNumber ?? 0);
   }
-  async clockSetFixedTime(params, metadata) {
-    await this._context.clock.setFixedTime(params.timeString ?? params.timeNumber ?? 0);
+  async clockSetFixedTime(params, progress) {
+    await this._context.clock.setFixedTime(progress, params.timeString ?? params.timeNumber ?? 0);
   }
-  async clockSetSystemTime(params, metadata) {
-    await this._context.clock.setSystemTime(params.timeString ?? params.timeNumber ?? 0);
+  async clockSetSystemTime(params, progress) {
+    await this._context.clock.setSystemTime(progress, params.timeString ?? params.timeNumber ?? 0);
   }
-  async updateSubscription(params) {
+  async updateSubscription(params, progress) {
     if (params.enabled)
       this._subscriptions.add(params.event);
     else
       this._subscriptions.delete(params.event);
   }
-  async registerSelectorEngine(params) {
+  async registerSelectorEngine(params, progress) {
     this._object.selectors().register(params.selectorEngine);
   }
-  async setTestIdAttributeName(params) {
+  async setTestIdAttributeName(params, progress) {
     this._object.selectors().setTestIdAttributeName(params.testIdAttributeName);
   }
   _onDispose() {
@@ -352,12 +369,15 @@ class BrowserContextDispatcher extends import_dispatcher.Dispatcher {
     this._context.removeExposedBindings(this._bindings).catch(() => {
     });
     this._bindings = [];
-    this._context.removeInitScripts(this._initScritps).catch(() => {
+    this._context.removeInitScripts(this._initScripts).catch(() => {
     });
-    this._initScritps = [];
-    if (this._clockPaused)
-      this._context.clock.resume().catch(() => {
+    this._initScripts = [];
+    if (this._routeWebSocketInitScript)
+      import_webSocketRouteDispatcher.WebSocketRouteDispatcher.uninstall(this.connection, this._context, this._routeWebSocketInitScript).catch(() => {
       });
+    this._routeWebSocketInitScript = void 0;
+    if (this._clockPaused)
+      this._context.clock.resumeNoReply();
     this._clockPaused = false;
   }
 }

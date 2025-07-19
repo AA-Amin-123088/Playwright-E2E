@@ -38,9 +38,13 @@ var import_browserType = require("../browserType");
 var import_bidiBrowser = require("./bidiBrowser");
 var import_bidiConnection = require("./bidiConnection");
 var import_firefoxPrefs = require("./third_party/firefoxPrefs");
+var import_manualPromise = require("../../utils/isomorphic/manualPromise");
 class BidiFirefox extends import_browserType.BrowserType {
   constructor(parent) {
-    super(parent, "bidi");
+    super(parent, "_bidiFirefox");
+  }
+  executablePath() {
+    return "";
   }
   async connectToTransport(transport, options) {
     return import_bidiBrowser.BidiBrowser.connect(this.attribution.playwright, transport, options);
@@ -55,7 +59,7 @@ Workaround: Set the HOME=/root environment variable${process.env.GITHUB_ACTION ?
       error.logs = "\n" + (0, import_ascii.wrapInASCIIBox)(import_browserType.kNoXServerRunningError, 1);
     return error;
   }
-  amendEnvironment(env, userDataDir, executable, browserArguments) {
+  amendEnvironment(env) {
     if (!import_path.default.isAbsolute(import_os.default.homedir()))
       throw new Error(`Cannot launch Firefox with relative home directory. Did you set ${import_os.default.platform() === "win32" ? "USERPROFILE" : "HOME"} to a relative path?`);
     env = {
@@ -95,15 +99,14 @@ Workaround: Set the HOME=/root environment variable${process.env.GITHUB_ACTION ?
     firefoxArguments.push(...args);
     return firefoxArguments;
   }
-  readyState(options) {
-    return new FirefoxReadyState();
-  }
-}
-class FirefoxReadyState extends import_browserType.BrowserReadyState {
-  onBrowserOutput(message) {
-    const match = message.match(/WebDriver BiDi listening on (ws:\/\/.*)$/);
-    if (match)
-      this._wsEndpoint.resolve(match[1] + "/session");
+  async waitForReadyState(options, browserLogsCollector) {
+    const result = new import_manualPromise.ManualPromise();
+    browserLogsCollector.onMessage((message) => {
+      const match = message.match(/WebDriver BiDi listening on (ws:\/\/.*)$/);
+      if (match)
+        result.resolve({ wsEndpoint: match[1] + "/session" });
+    });
+    return result;
   }
 }
 // Annotate the CommonJS export names for ESM import in node:

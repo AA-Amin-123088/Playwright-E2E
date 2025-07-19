@@ -363,7 +363,7 @@ class Frame extends import_channelOwner.ChannelOwner {
       await this.uncheck(selector, options);
   }
   async waitForTimeout(timeout) {
-    await this._channel.waitForTimeout({ timeout });
+    await this._channel.waitForTimeout({ waitTimeout: timeout });
   }
   async waitForFunction(pageFunction, arg, options = {}) {
     if (typeof options.polling === "string")
@@ -380,6 +380,14 @@ class Frame extends import_channelOwner.ChannelOwner {
   }
   async title() {
     return (await this._channel.title()).value;
+  }
+  async _expect(expression, options) {
+    const params = { expression, ...options, isNot: !!options.isNot };
+    params.expectedValue = (0, import_jsHandle.serializeArgument)(options.expectedValue);
+    const result = await this._channel.expect(params);
+    if (result.received !== void 0)
+      result.received = (0, import_jsHandle.parseResult)(result.received);
+    return result;
   }
 }
 function verifyLoadState(name, waitUntil) {

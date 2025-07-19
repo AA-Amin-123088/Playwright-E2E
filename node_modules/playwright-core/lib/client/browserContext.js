@@ -66,6 +66,7 @@ class BrowserContext extends import_channelOwner.ChannelOwner {
     // Browser is null for browser contexts created outside of normal browser, e.g. android or electron.
     this._browser = null;
     this._bindings = /* @__PURE__ */ new Map();
+    this._forReuse = false;
     this._backgroundPages = /* @__PURE__ */ new Set();
     this._serviceWorkers = /* @__PURE__ */ new Set();
     this._harRecorders = /* @__PURE__ */ new Map();
@@ -126,6 +127,14 @@ class BrowserContext extends import_channelOwner.ChannelOwner {
     this._channel.on("requestFailed", ({ request, failureText, responseEndTiming, page }) => this._onRequestFailed(network.Request.from(request), responseEndTiming, failureText, import_page.Page.fromNullable(page)));
     this._channel.on("requestFinished", (params) => this._onRequestFinished(params));
     this._channel.on("response", ({ response, page }) => this._onResponse(network.Response.from(response), import_page.Page.fromNullable(page)));
+    this._channel.on("recorderEvent", ({ event, data, page }) => {
+      if (event === "actionAdded")
+        this._onRecorderEventSink?.actionAdded(import_page.Page.from(page), data);
+      else if (event === "actionUpdated")
+        this._onRecorderEventSink?.actionUpdated(import_page.Page.from(page), data);
+      else if (event === "signalAdded")
+        this._onRecorderEventSink?.signalAdded(import_page.Page.from(page), data);
+    });
     this._closedPromise = new Promise((f) => this.once(import_events.Events.BrowserContext.Close, f));
     this._setEventToSubscriptionMapping(/* @__PURE__ */ new Map([
       [import_events.Events.BrowserContext.Console, "console"],
@@ -354,11 +363,11 @@ class BrowserContext extends import_channelOwner.ChannelOwner {
   }
   async _unrouteInternal(removed, remaining, behavior) {
     this._routes = remaining;
+    if (behavior && behavior !== "default") {
+      const promises = removed.map((routeHandler) => routeHandler.stop(behavior));
+      await Promise.all(promises);
+    }
     await this._updateInterceptionPatterns();
-    if (!behavior || behavior === "default")
-      return;
-    const promises = removed.map((routeHandler) => routeHandler.stop(behavior));
-    await Promise.all(promises);
   }
   async _updateInterceptionPatterns() {
     const patterns = network.RouteHandler.prepareInterceptionPatterns(this._routes);
@@ -444,8 +453,14 @@ class BrowserContext extends import_channelOwner.ChannelOwner {
     await this._channel.close(options);
     await this._closedPromise;
   }
-  async _enableRecorder(params) {
+  async _enableRecorder(params, eventSink) {
+    if (eventSink)
+      this._onRecorderEventSink = eventSink;
     await this._channel.enableRecorder(params);
+  }
+  async _disableRecorder() {
+    this._onRecorderEventSink = void 0;
+    await this._channel.disableRecorder();
   }
 }
 async function prepareStorageState(platform, options) {

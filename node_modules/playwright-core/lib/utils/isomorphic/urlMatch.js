@@ -123,6 +123,8 @@ function resolveGlobBase(baseURL, match) {
     var mapToken = mapToken2;
     const tokenMap = /* @__PURE__ */ new Map();
     match = match.replaceAll(/\\\\\?/g, "?");
+    if (match.startsWith("about:") || match.startsWith("data:") || match.startsWith("chrome:") || match.startsWith("edge:") || match.startsWith("file:"))
+      return match;
     const relativePath = match.split("/").map((token, index) => {
       if (token === "." || token === ".." || token === "")
         return token;

@@ -66,7 +66,7 @@ class CRBrowser extends import_browser.Browser {
   }
   static async connect(parent, transport, options, devtools) {
     options = { ...options };
-    const connection = new import_crConnection.CRConnection(transport, options.protocolLogger, options.browserLogsCollector);
+    const connection = new import_crConnection.CRConnection(parent, transport, options.protocolLogger, options.browserLogsCollector);
     const browser = new CRBrowser(parent, connection, options);
     browser._devtools = devtools;
     if (browser.isClank())
@@ -332,18 +332,51 @@ class CRBrowserContext extends import_browserContext.BrowserContext {
   async doGetCookies(urls) {
     const { cookies } = await this._browser._session.send("Storage.getCookies", { browserContextId: this._browserContextId });
     return network.filterCookies(cookies.map((c) => {
-      const copy = { sameSite: "Lax", ...c };
-      delete copy.size;
-      delete copy.priority;
-      delete copy.session;
-      delete copy.sameParty;
-      delete copy.sourceScheme;
-      delete copy.sourcePort;
+      const { name, value, domain, path: path2, expires, httpOnly, secure, sameSite } = c;
+      const copy = {
+        name,
+        value,
+        domain,
+        path: path2,
+        expires,
+        httpOnly,
+        secure,
+        sameSite: sameSite ?? "Lax"
+      };
+      if (c.partitionKey) {
+        copy._crHasCrossSiteAncestor = c.partitionKey.hasCrossSiteAncestor;
+        copy.partitionKey = c.partitionKey.topLevelSite;
+      }
       return copy;
     }), urls);
   }
   async addCookies(cookies) {
-    await this._browser._session.send("Storage.setCookies", { cookies: network.rewriteCookies(cookies), browserContextId: this._browserContextId });
+    function toChromiumCookie(cookie) {
+      const { name, value, url, domain, path: path2, expires, httpOnly, secure, sameSite, partitionKey, _crHasCrossSiteAncestor } = cookie;
+      const copy = {
+        name,
+        value,
+        url,
+        domain,
+        path: path2,
+        expires,
+        httpOnly,
+        secure,
+        sameSite
+      };
+      if (partitionKey) {
+        copy.partitionKey = {
+          topLevelSite: partitionKey,
+          // _crHasCrossSiteAncestor is non-standard, set it true by default if the cookie is partitioned.
+          hasCrossSiteAncestor: _crHasCrossSiteAncestor ?? true
+        };
+      }
+      return copy;
+    }
+    await this._browser._session.send("Storage.setCookies", {
+      cookies: network.rewriteCookies(cookies).map(toChromiumCookie),
+      browserContextId: this._browserContextId
+    });
   }
   async doClearCookies() {
     await this._browser._session.send("Storage.clearCookies", { browserContextId: this._browserContextId });
@@ -365,7 +398,8 @@ class CRBrowserContext extends import_browserContext.BrowserContext {
       ["payment-handler", "paymentHandler"],
       // chrome-specific permissions we have.
       ["midi-sysex", "midiSysex"],
-      ["storage-access", "storageAccess"]
+      ["storage-access", "storageAccess"],
+      ["local-fonts", "localFonts"]
     ]);
     const filtered = permissions.map((permission) => {
       const protocolPermission = webPermissionToProtocol.get(permission);
@@ -384,8 +418,7 @@ class CRBrowserContext extends import_browserContext.BrowserContext {
     for (const page of this.pages())
       await page.delegate.updateGeolocation();
   }
-  async setExtraHTTPHeaders(headers) {
-    this._options.extraHTTPHeaders = headers;
+  async doUpdateExtraHTTPHeaders() {
     for (const page of this.pages())
       await page.delegate.updateExtraHTTPHeaders();
     for (const sw of this.serviceWorkers())
@@ -396,8 +429,7 @@ class CRBrowserContext extends import_browserContext.BrowserContext {
     for (const page of this.pages())
       await page.delegate.updateUserAgent();
   }
-  async setOffline(offline) {
-    this._options.offline = offline;
+  async doUpdateOffline() {
     for (const page of this.pages())
       await page.delegate.updateOffline();
     for (const sw of this.serviceWorkers())
@@ -423,6 +455,10 @@ class CRBrowserContext extends import_browserContext.BrowserContext {
       await page.delegate.updateRequestInterception();
     for (const sw of this.serviceWorkers())
       await sw.updateRequestInterception();
+  }
+  async doUpdateDefaultViewport() {
+  }
+  async doUpdateDefaultEmulatedMedia() {
   }
   async doExposePlaywrightBinding() {
     for (const page of this._crPages())

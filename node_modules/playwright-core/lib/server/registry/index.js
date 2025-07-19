@@ -399,7 +399,8 @@ const DOWNLOAD_PATHS = {
     "win64": "builds/android/%s/android.zip"
   },
   // TODO(bidi): implement downloads.
-  "bidi": {}
+  "_bidiFirefox": {},
+  "_bidiChromium": {}
 };
 const registryDirectory = (() => {
   let result;
@@ -654,8 +655,8 @@ ${(0, import_ascii.wrapInASCIIBox)(prettyMessage, 1)}`);
     }));
     this._executables.push({
       type: "browser",
-      name: "bidi-chromium",
-      browserName: "bidi",
+      name: "_bidiChromium",
+      browserName: "_bidiChromium",
       directory: chromium.dir,
       executablePath: () => chromiumExecutable,
       executablePathOrDie: (sdkLanguage) => executablePathOrDie("chromium", chromiumExecutable, chromium.installByDefault, sdkLanguage),
@@ -775,20 +776,6 @@ ${(0, import_ascii.wrapInASCIIBox)(prettyMessage, 1)}`);
       _dependencyGroup: "tools",
       _isHermeticInstallation: true
     });
-    this._executables.push({
-      type: "browser",
-      name: "bidi",
-      browserName: "bidi",
-      directory: void 0,
-      executablePath: () => void 0,
-      executablePathOrDie: () => "",
-      installType: "none",
-      _validateHostRequirements: () => Promise.resolve(),
-      downloadURLs: [],
-      _install: () => Promise.resolve(),
-      _dependencyGroup: "tools",
-      _isHermeticInstallation: true
-    });
   }
   _createChromiumChannel(name, lookAt, install) {
     const executablePath = (sdkLanguage, shouldThrow) => {
@@ -859,7 +846,7 @@ Run "${buildPlaywrightCLICommand(sdkLanguage, "install " + name)}"` : "";
     return {
       type: "channel",
       name,
-      browserName: "bidi",
+      browserName: "_bidiFirefox",
       directory: void 0,
       executablePath: (sdkLanguage) => executablePath(sdkLanguage, false),
       executablePathOrDie: (sdkLanguage) => executablePath(sdkLanguage, true),
@@ -874,7 +861,7 @@ Run "${buildPlaywrightCLICommand(sdkLanguage, "install " + name)}"` : "";
       const suffix = lookAt[process.platform];
       if (!suffix) {
         if (shouldThrow)
-          throw new Error(`Firefox distribution '${name}' is not supported on ${process.platform}`);
+          throw new Error(`Chromium distribution '${name}' is not supported on ${process.platform}`);
         return void 0;
       }
       const prefixes = process.platform === "win32" ? [
@@ -900,7 +887,7 @@ Run "${buildPlaywrightCLICommand(sdkLanguage, "install " + name)}"` : "";
     return {
       type: "channel",
       name,
-      browserName: "bidi",
+      browserName: "_bidiChromium",
       directory: void 0,
       executablePath: (sdkLanguage) => executablePath(sdkLanguage, false),
       executablePathOrDie: (sdkLanguage) => executablePath(sdkLanguage, true),
@@ -1102,7 +1089,7 @@ ${e.stack}`);
   async _installMSEdgeChannel(channel, scripts) {
     const scriptArgs = [];
     if (process.platform !== "linux") {
-      const products = lowercaseAllKeys(JSON.parse(await (0, import_network.fetchData)({ url: "https://edgeupdates.microsoft.com/api/products" })));
+      const products = lowercaseAllKeys(JSON.parse(await (0, import_network.fetchData)(void 0, { url: "https://edgeupdates.microsoft.com/api/products" })));
       const productName = {
         "msedge": "Stable",
         "msedge-beta": "Beta",

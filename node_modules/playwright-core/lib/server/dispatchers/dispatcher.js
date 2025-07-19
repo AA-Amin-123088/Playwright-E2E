@@ -34,6 +34,7 @@ var import_instrumentation = require("../instrumentation");
 var import_protocolError = require("../protocolError");
 var import_callLog = require("../callLog");
 var import_protocolMetainfo = require("../../utils/isomorphic/protocolMetainfo");
+var import_progress = require("../progress");
 const metadataValidator = (0, import_validator.createMetadataValidator)();
 let maxDispatchersOverride;
 function setMaxDispatchersForTest(value) {
@@ -48,11 +49,10 @@ function maxDispatchersForBucket(gcBucket) {
 class Dispatcher extends import_events.EventEmitter {
   constructor(parent, object, type, initializer, gcBucket) {
     super();
-    // Only "isScope" channel owners have registered dispatchers inside.
     this._dispatchers = /* @__PURE__ */ new Map();
     this._disposed = false;
     this._eventListeners = [];
-    this._openScope = new import_utils.LongStandingScope();
+    this._activeProgressControllers = /* @__PURE__ */ new Set();
     this.connection = parent instanceof DispatcherConnection ? parent : parent.connection;
     this._parent = parent instanceof DispatcherConnection ? void 0 : parent;
     const guid = object.guid;
@@ -84,14 +84,13 @@ class Dispatcher extends import_events.EventEmitter {
     child._parent = this;
     this.connection.sendAdopt(this, child);
   }
-  async _handleCommand(callMetadata, method, validParams) {
-    const commandPromise = this[method](validParams, callMetadata);
+  async _runCommand(callMetadata, method, validParams) {
+    const controller = new import_progress.ProgressController(callMetadata, this._object);
+    this._activeProgressControllers.add(controller);
     try {
-      return await this._openScope.race(commandPromise);
-    } catch (e) {
-      if (callMetadata.potentiallyClosesScope && (0, import_errors.isTargetClosedError)(e))
-        return await commandPromise;
-      throw e;
+      return await controller.run((progress) => this[method](validParams, progress), validParams?.timeout);
+    } finally {
+      this._activeProgressControllers.delete(controller);
     }
   }
   _dispatchEvent(method, params) {
@@ -108,8 +107,23 @@ class Dispatcher extends import_events.EventEmitter {
   }
   _onDispose() {
   }
+  async stopPendingOperations(error) {
+    const controllers = [];
+    const collect = (dispatcher) => {
+      controllers.push(...dispatcher._activeProgressControllers);
+      for (const child of [...dispatcher._dispatchers.values()])
+        collect(child);
+    };
+    collect(this);
+    await Promise.all(controllers.map((controller) => controller.abort(error)));
+  }
   _disposeRecursively(error) {
     (0, import_utils.assert)(!this._disposed, `${this._guid} is disposed more than once`);
+    for (const controller of this._activeProgressControllers) {
+      if (!controller.metadata.potentiallyClosesScope)
+        controller.abort(error).catch(() => {
+        });
+    }
     this._onDispose();
     this._disposed = true;
     import_eventsHelper.eventsHelper.removeEventListeners(this._eventListeners);
@@ -121,7 +135,6 @@ class Dispatcher extends import_events.EventEmitter {
     for (const dispatcher of [...this._dispatchers.values()])
       dispatcher._disposeRecursively(error);
     this._dispatchers.clear();
-    this._openScope.close(error);
   }
   _debugScopeState() {
     return {
@@ -134,11 +147,11 @@ class Dispatcher extends import_events.EventEmitter {
 }
 class RootDispatcher extends Dispatcher {
   constructor(connection, createPlaywright) {
-    super(connection, { guid: "" }, "Root", {});
+    super(connection, (0, import_instrumentation.createRootSdkObject)(), "Root", {});
     this.createPlaywright = createPlaywright;
     this._initialized = false;
   }
-  async initialize(params) {
+  async initialize(params, progress) {
     (0, import_utils.assert)(this.createPlaywright);
     (0, import_utils.assert)(!this._initialized);
     this._initialized = true;
@@ -259,16 +272,16 @@ class DispatcherConnection {
     if (import_protocolMetainfo.methodMetainfo.get(dispatcher._type + "." + method)?.internal) {
       validMetadata.internal = true;
     }
-    const sdkObject = dispatcher._object instanceof import_instrumentation.SdkObject ? dispatcher._object : void 0;
+    const sdkObject = dispatcher._object;
     const callMetadata = {
       id: `call@${id}`,
       location: validMetadata.location,
       title: validMetadata.title,
       internal: validMetadata.internal,
       stepId: validMetadata.stepId,
-      objectId: sdkObject?.guid,
-      pageId: sdkObject?.attribution?.page?.guid,
-      frameId: sdkObject?.attribution?.frame?.guid,
+      objectId: sdkObject.guid,
+      pageId: sdkObject.attribution?.page?.guid,
+      frameId: sdkObject.attribution?.frame?.guid,
       startTime: (0, import_utils.monotonicTime)(),
       endTime: 0,
       type: dispatcher._type,
@@ -276,7 +289,7 @@ class DispatcherConnection {
       params: params || {},
       log: []
     };
-    if (sdkObject && params?.info?.waitId) {
+    if (params?.info?.waitId) {
       const info = params.info;
       switch (info.phase) {
         case "before": {
@@ -303,31 +316,29 @@ class DispatcherConnection {
         }
       }
     }
-    await sdkObject?.instrumentation.onBeforeCall(sdkObject, callMetadata);
+    await sdkObject.instrumentation.onBeforeCall(sdkObject, callMetadata);
     const response = { id };
     try {
-      const result = await dispatcher._handleCommand(callMetadata, method, validParams);
+      const result = await dispatcher._runCommand(callMetadata, method, validParams);
       const validator = (0, import_validator.findValidator)(dispatcher._type, method, "Result");
       response.result = validator(result, "", this._validatorToWireContext());
       callMetadata.result = result;
     } catch (e) {
-      if ((0, import_errors.isTargetClosedError)(e) && sdkObject) {
+      if ((0, import_errors.isTargetClosedError)(e)) {
         const reason = closeReason(sdkObject);
         if (reason)
           (0, import_utils.rewriteErrorMessage)(e, reason);
       } else if ((0, import_protocolError.isProtocolError)(e)) {
-        if (e.type === "closed") {
-          const reason = sdkObject ? closeReason(sdkObject) : void 0;
-          e = new import_errors.TargetClosedError(reason, e.browserLogMessage());
-        } else if (e.type === "crashed") {
+        if (e.type === "closed")
+          e = new import_errors.TargetClosedError(closeReason(sdkObject), e.browserLogMessage());
+        else if (e.type === "crashed")
           (0, import_utils.rewriteErrorMessage)(e, "Target crashed " + e.browserLogMessage());
-        }
       }
       response.error = (0, import_errors.serializeError)(e);
       callMetadata.error = response.error;
     } finally {
       callMetadata.endTime = (0, import_utils.monotonicTime)();
-      await sdkObject?.instrumentation.onAfterCall(sdkObject, callMetadata);
+      await sdkObject.instrumentation.onAfterCall(sdkObject, callMetadata);
     }
     if (response.error)
       response.log = (0, import_callLog.compressCallLog)(callMetadata.log);

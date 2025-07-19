@@ -31,11 +31,18 @@ module.exports = __toCommonJS(locatorGenerators_exports);
 var import_selectorParser = require("./selectorParser");
 var import_stringUtils = require("./stringUtils");
 function asLocatorDescription(lang, selector) {
-  const parsed = (0, import_selectorParser.parseSelector)(selector);
-  const lastPart = parsed.parts[parsed.parts.length - 1];
-  if (lastPart?.name === "internal:describe")
-    return JSON.parse(lastPart.body);
-  return asLocator(lang, selector);
+  try {
+    const parsed = (0, import_selectorParser.parseSelector)(selector);
+    const lastPart = parsed.parts[parsed.parts.length - 1];
+    if (lastPart?.name === "internal:describe") {
+      const description = JSON.parse(lastPart.body);
+      if (typeof description === "string")
+        return description;
+    }
+    return innerAsLocators(new generators[lang](), parsed, false, 1)[0];
+  } catch (e) {
+    return selector;
+  }
 }
 function asLocator(lang, selector, isFrameLocator = false) {
   return asLocators(lang, selector, isFrameLocator, 1)[0];

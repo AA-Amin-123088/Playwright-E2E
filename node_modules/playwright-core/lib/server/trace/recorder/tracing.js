@@ -49,6 +49,7 @@ var import_fileUtils = require("../../utils/fileUtils");
 var import_harTracer = require("../../har/harTracer");
 var import_instrumentation = require("../../instrumentation");
 var import_page = require("../../page");
+var import_progress = require("../../progress");
 const version = 8;
 const kScreencastOptions = { width: 800, height: 600, quality: 90 };
 class Tracing extends import_instrumentation.SdkObject {
@@ -78,7 +79,7 @@ class Tracing extends import_instrumentation.SdkObject {
       platform: process.platform,
       wallTime: 0,
       monotonicTime: 0,
-      sdkLanguage: context.attribution.playwright.options.sdkLanguage,
+      sdkLanguage: this._sdkLanguage(),
       testIdAttributeName,
       contextId: context.guid
     };
@@ -90,18 +91,22 @@ class Tracing extends import_instrumentation.SdkObject {
       this._contextCreatedEvent.options = context._options;
     }
   }
-  async resetForReuse() {
-    await this.stopChunk({ mode: "discard" }).catch(() => {
-    });
-    await this.stop();
-    await this._snapshotter?.resetForReuse();
+  _sdkLanguage() {
+    return this._context instanceof import_browserContext.BrowserContext ? this._context._browser.sdkLanguage() : this._context.attribution.playwright.options.sdkLanguage;
   }
-  async start(options) {
+  async resetForReuse(progress) {
+    await this.stopChunk(progress, { mode: "discard" }).catch(() => {
+    });
+    await this.stop(progress);
+    if (this._snapshotter)
+      await progress.race(this._snapshotter.resetForReuse());
+  }
+  start(options) {
     if (this._isStopping)
       throw new Error("Cannot start tracing while stopping");
     if (this._state)
       throw new Error("Tracing has been already started");
-    this._contextCreatedEvent.sdkLanguage = this._context.attribution.playwright.options.sdkLanguage;
+    this._contextCreatedEvent.sdkLanguage = this._sdkLanguage();
     const traceName = options.name || (0, import_crypto.createGuid)();
     const tracesDir = this._createTracesDirIfNeeded();
     this._state = {
@@ -123,9 +128,9 @@ class Tracing extends import_instrumentation.SdkObject {
     if (options.snapshots)
       this._harTracer.start({ omitScripts: !options.live });
   }
-  async startChunk(options = {}) {
+  async startChunk(progress, options = {}) {
     if (this._state && this._state.recording)
-      await this.stopChunk({ mode: "discard" });
+      await this.stopChunk(progress, { mode: "discard" });
     if (!this._state)
       throw new Error("Must start tracing before starting a new chunk");
     if (this._isStopping)
@@ -161,7 +166,7 @@ class Tracing extends import_instrumentation.SdkObject {
   _currentGroupId() {
     return this._state?.groupStack.length ? this._state.groupStack[this._state.groupStack.length - 1] : void 0;
   }
-  async group(name, location, metadata) {
+  group(name, location, metadata) {
     if (!this._state)
       return;
     const stackFrames = [];
@@ -232,7 +237,7 @@ class Tracing extends import_instrumentation.SdkObject {
       this._fs.copyFile(state.networkFile, newNetworkFile);
     state.networkFile = newNetworkFile;
   }
-  async stop() {
+  async stop(progress) {
     if (!this._state)
       return;
     if (this._isStopping)
@@ -242,8 +247,9 @@ class Tracing extends import_instrumentation.SdkObject {
     this._closeAllGroups();
     this._harTracer.stop();
     this.flushHarEntries();
-    await this._fs.syncAndGetError();
-    this._state = void 0;
+    await progress.race(this._fs.syncAndGetError()).finally(() => {
+      this._state = void 0;
+    });
   }
   async deleteTmpTracesDir() {
     if (this._tracesTmpDir)
@@ -267,7 +273,7 @@ class Tracing extends import_instrumentation.SdkObject {
     while (this._currentGroupId())
       this.groupEnd();
   }
-  async stopChunk(params) {
+  async stopChunk(progress, params) {
     if (this._isStopping)
       throw new Error(`Tracing is already stopping`);
     this._isStopping = true;
@@ -283,7 +289,7 @@ class Tracing extends import_instrumentation.SdkObject {
     if (this._state.options.screenshots)
       this._stopScreencast();
     if (this._state.options.snapshots)
-      await this._snapshotter?.stop();
+      this._snapshotter?.stop();
     this.flushHarEntries();
     const newNetworkFile = import_path.default.join(this._state.tracesDir, this._state.traceName + `-pwnetcopy-${this._state.chunkOrdinal}.network`);
     const entries = [];
@@ -301,12 +307,12 @@ class Tracing extends import_instrumentation.SdkObject {
     const zipFileName = this._state.traceFile + ".zip";
     if (params.mode === "archive")
       this._fs.zip(entries, zipFileName);
-    const error = await this._fs.syncAndGetError();
+    const error = await progress.race(this._fs.syncAndGetError()).catch((e) => e);
     this._isStopping = false;
     if (this._state)
       this._state.recording = false;
     if (error) {
-      if (this._context instanceof import_browserContext.BrowserContext && !this._context._browser.isConnected())
+      if (!(0, import_progress.isAbortError)(error) && this._context instanceof import_browserContext.BrowserContext && !this._context._browser.isConnected())
         return {};
       throw error;
     }

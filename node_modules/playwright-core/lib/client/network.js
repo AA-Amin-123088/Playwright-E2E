@@ -448,7 +448,8 @@ class WebSocketRoute extends import_channelOwner.ChannelOwner {
   async _afterHandle() {
     if (this._connected)
       return;
-    await this._channel.ensureOpened();
+    await this._channel.ensureOpened().catch(() => {
+    });
   }
 }
 class WebSocketRouteHandler {

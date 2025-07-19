@@ -44,7 +44,6 @@ var import_helper = require("./helper");
 var input = __toESM(require("./input"));
 var import_instrumentation = require("./instrumentation");
 var js = __toESM(require("./javascript"));
-var import_progress = require("./progress");
 var import_screenshotter = require("./screenshotter");
 var import_utils = require("../utils");
 var import_utils2 = require("../utils");
@@ -83,7 +82,7 @@ class Page extends import_instrumentation.SdkObject {
     this.delegate = delegate;
     this.browserContext = browserContext;
     this.accessibility = new accessibility.Accessibility(delegate.getAccessibilityTree.bind(delegate));
-    this.keyboard = new input.Keyboard(delegate.rawKeyboard);
+    this.keyboard = new input.Keyboard(delegate.rawKeyboard, this);
     this.mouse = new input.Mouse(delegate.rawMouse, this);
     this.touchscreen = new input.Touchscreen(delegate.rawTouchscreen, this);
     this.screenshotter = new import_screenshotter.Screenshotter(this);
@@ -153,17 +152,17 @@ class Page extends import_instrumentation.SdkObject {
     else
       this._eventsToEmitAfterInitialized.push({ event, args });
   }
-  async resetForReuse(metadata) {
-    this._locatorHandlers.clear();
-    await this.mainFrame().goto(metadata, "about:blank", { timeout: 0 });
+  async resetForReuse(progress) {
+    await this.mainFrame().gotoImpl(progress, "about:blank", {});
     this._emulatedSize = void 0;
     this._emulatedMedia = {};
     this._extraHTTPHeaders = void 0;
     await Promise.all([
       this.delegate.updateEmulatedViewportSize(),
-      this.delegate.updateEmulateMedia()
+      this.delegate.updateEmulateMedia(),
+      this.delegate.updateExtraHTTPHeaders()
     ]);
-    await this.delegate.resetForReuse();
+    await this.delegate.resetForReuse(progress);
   }
   _didClose() {
     this.frameManager.dispose();
@@ -206,16 +205,17 @@ class Page extends import_instrumentation.SdkObject {
   frames() {
     return this.frameManager.frames();
   }
-  async exposeBinding(name, needsHandle, playwrightBinding) {
+  async exposeBinding(progress, name, needsHandle, playwrightBinding) {
     if (this._pageBindings.has(name))
       throw new Error(`Function "${name}" has been already registered`);
     if (this.browserContext._pageBindings.has(name))
       throw new Error(`Function "${name}" has been already registered in the browser context`);
-    await this.browserContext.exposePlaywrightBindingIfNeeded();
+    await progress.race(this.browserContext.exposePlaywrightBindingIfNeeded());
     const binding = new PageBinding(name, playwrightBinding, needsHandle);
     this._pageBindings.set(name, binding);
-    await this.delegate.addInitScript(binding.initScript);
-    await this.safeNonStallingEvaluateInAllFrames(binding.initScript.source, "main");
+    progress.cleanupWhenAborted(() => this._pageBindings.delete(name));
+    await progress.race(this.delegate.addInitScript(binding.initScript));
+    await progress.race(this.safeNonStallingEvaluateInAllFrames(binding.initScript.source, "main"));
     return binding;
   }
   async removeExposedBindings(bindings) {
@@ -227,9 +227,14 @@ class Page extends import_instrumentation.SdkObject {
 `).join("");
     await this.safeNonStallingEvaluateInAllFrames(cleanup, "main");
   }
-  setExtraHTTPHeaders(headers) {
+  async setExtraHTTPHeaders(progress, headers) {
+    const oldHeaders = this._extraHTTPHeaders;
     this._extraHTTPHeaders = headers;
-    return this.delegate.updateExtraHTTPHeaders();
+    progress.cleanupWhenAborted(async () => {
+      this._extraHTTPHeaders = oldHeaders;
+      await this.delegate.updateExtraHTTPHeaders();
+    });
+    await progress.race(this.delegate.updateExtraHTTPHeaders());
   }
   extraHTTPHeaders() {
     return this._extraHTTPHeaders;
@@ -248,50 +253,53 @@ class Page extends import_instrumentation.SdkObject {
     }
     this.emitOnContextOnceInitialized(import_browserContext.BrowserContext.Events.Console, message);
   }
-  async reload(metadata, options) {
-    const controller = new import_progress.ProgressController(metadata, this);
-    return controller.run((progress) => this.mainFrame().raceNavigationAction(progress, options, async () => {
+  async reload(progress, options) {
+    return this.mainFrame().raceNavigationAction(progress, async () => {
       const [response] = await Promise.all([
         // Reload must be a new document, and should not be confused with a stray pushState.
         this.mainFrame()._waitForNavigation(progress, true, options),
-        this.delegate.reload()
+        progress.race(this.delegate.reload())
       ]);
       return response;
-    }), options.timeout);
+    });
   }
-  async goBack(metadata, options) {
-    const controller = new import_progress.ProgressController(metadata, this);
-    return controller.run((progress) => this.mainFrame().raceNavigationAction(progress, options, async () => {
+  async goBack(progress, options) {
+    return this.mainFrame().raceNavigationAction(progress, async () => {
       let error;
       const waitPromise = this.mainFrame()._waitForNavigation(progress, false, options).catch((e) => {
         error = e;
         return null;
       });
-      const result = await this.delegate.goBack();
-      if (!result)
+      const result = await progress.race(this.delegate.goBack());
+      if (!result) {
+        waitPromise.catch(() => {
+        });
         return null;
+      }
       const response = await waitPromise;
       if (error)
         throw error;
       return response;
-    }), options.timeout);
+    });
   }
-  async goForward(metadata, options) {
-    const controller = new import_progress.ProgressController(metadata, this);
-    return controller.run((progress) => this.mainFrame().raceNavigationAction(progress, options, async () => {
+  async goForward(progress, options) {
+    return this.mainFrame().raceNavigationAction(progress, async () => {
       let error;
       const waitPromise = this.mainFrame()._waitForNavigation(progress, false, options).catch((e) => {
         error = e;
         return null;
       });
-      const result = await this.delegate.goForward();
-      if (!result)
+      const result = await progress.race(this.delegate.goForward());
+      if (!result) {
+        waitPromise.catch(() => {
+        });
         return null;
+      }
       const response = await waitPromise;
       if (error)
         throw error;
       return response;
-    }), options.timeout);
+    });
   }
   requestGC() {
     return this.delegate.requestGC();
@@ -315,14 +323,10 @@ class Page extends import_instrumentation.SdkObject {
   }
   async performActionPreChecks(progress) {
     await this._performWaitForNavigationCheck(progress);
-    progress.throwIfAborted();
     await this._performLocatorHandlersCheckpoint(progress);
-    progress.throwIfAborted();
     await this._performWaitForNavigationCheck(progress);
   }
   async _performWaitForNavigationCheck(progress) {
-    if (process.env.PLAYWRIGHT_SKIP_NAVIGATION_CHECK)
-      return;
     const mainFrame = this.frameManager.mainFrame();
     if (!mainFrame || !mainFrame.pendingDocument())
       return;
@@ -342,30 +346,33 @@ class Page extends import_instrumentation.SdkObject {
       return;
     for (const [uid, handler] of this._locatorHandlers) {
       if (!handler.resolved) {
-        if (await this.mainFrame().isVisibleInternal(handler.selector, { strict: true })) {
+        if (await this.mainFrame().isVisibleInternal(progress, handler.selector, { strict: true })) {
           handler.resolved = new import_manualPromise.ManualPromise();
           this.emit(Page.Events.LocatorHandlerTriggered, uid);
         }
       }
       if (handler.resolved) {
         ++this._locatorHandlerRunningCounter;
-        progress.log(`  found ${(0, import_utils2.asLocator)(this.attribution.playwright.options.sdkLanguage, handler.selector)}, intercepting action to run the handler`);
+        progress.log(`  found ${(0, import_utils2.asLocator)(this.browserContext._browser.sdkLanguage(), handler.selector)}, intercepting action to run the handler`);
         const promise = handler.resolved.then(async () => {
-          progress.throwIfAborted();
           if (!handler.noWaitAfter) {
-            progress.log(`  locator handler has finished, waiting for ${(0, import_utils2.asLocator)(this.attribution.playwright.options.sdkLanguage, handler.selector)} to be hidden`);
-            await this.mainFrame().waitForSelectorInternal(progress, handler.selector, false, { state: "hidden" });
+            progress.log(`  locator handler has finished, waiting for ${(0, import_utils2.asLocator)(this.browserContext._browser.sdkLanguage(), handler.selector)} to be hidden`);
+            await this.mainFrame().waitForSelector(progress, handler.selector, false, { state: "hidden" });
           } else {
             progress.log(`  locator handler has finished`);
           }
         });
-        await this.openScope.race(promise).finally(() => --this._locatorHandlerRunningCounter);
-        progress.throwIfAborted();
+        await progress.race(this.openScope.race(promise)).finally(() => --this._locatorHandlerRunningCounter);
         progress.log(`  interception handler has finished, continuing`);
       }
     }
   }
-  async emulateMedia(options) {
+  async emulateMedia(progress, options) {
+    const oldEmulatedMedia = { ...this._emulatedMedia };
+    progress.cleanupWhenAborted(async () => {
+      this._emulatedMedia = oldEmulatedMedia;
+      await this.delegate.updateEmulateMedia();
+    });
     if (options.media !== void 0)
       this._emulatedMedia.media = options.media;
     if (options.colorScheme !== void 0)
@@ -376,7 +383,7 @@ class Page extends import_instrumentation.SdkObject {
       this._emulatedMedia.forcedColors = options.forcedColors;
     if (options.contrast !== void 0)
       this._emulatedMedia.contrast = options.contrast;
-    await this.delegate.updateEmulateMedia();
+    await progress.race(this.delegate.updateEmulateMedia());
   }
   emulatedMedia() {
     const contextOptions = this.browserContext._options;
@@ -388,9 +395,14 @@ class Page extends import_instrumentation.SdkObject {
       contrast: this._emulatedMedia.contrast !== void 0 ? this._emulatedMedia.contrast : contextOptions.contrast ?? "no-preference"
     };
   }
-  async setViewportSize(viewportSize) {
+  async setViewportSize(progress, viewportSize) {
+    const oldEmulatedSize = this._emulatedSize;
+    progress.cleanupWhenAborted(async () => {
+      this._emulatedSize = oldEmulatedSize;
+      await this.delegate.updateEmulatedViewportSize();
+    });
     this._setEmulatedSize({ viewport: { ...viewportSize }, screen: { ...viewportSize } });
-    await this.delegate.updateEmulatedViewportSize();
+    await progress.race(this.delegate.updateEmulatedViewportSize());
   }
   setEmulatedSizeFromWindowOpen(emulatedSize) {
     this._setEmulatedSize(emulatedSize);
@@ -408,10 +420,11 @@ class Page extends import_instrumentation.SdkObject {
   async bringToFront() {
     await this.delegate.bringToFront();
   }
-  async addInitScript(source, name) {
-    const initScript = new InitScript(source, name);
+  async addInitScript(progress, source) {
+    const initScript = new InitScript(source);
     this.initScripts.push(initScript);
-    await this.delegate.addInitScript(initScript);
+    progress.cleanupWhenAborted(() => this.removeInitScripts([initScript]));
+    await progress.race(this.delegate.addInitScript(initScript));
     return initScript;
   }
   async removeInitScripts(initScripts) {
@@ -422,7 +435,7 @@ class Page extends import_instrumentation.SdkObject {
   needsRequestInterception() {
     return this.requestInterceptors.length > 0 || this.browserContext.requestInterceptors.length > 0;
   }
-  async addRequestInterceptor(handler, prepend) {
+  async addRequestInterceptor(progress, handler, prepend) {
     if (prepend)
       this.requestInterceptors.unshift(handler);
     else
@@ -437,17 +450,16 @@ class Page extends import_instrumentation.SdkObject {
     await this.browserContext.notifyRoutesInFlightAboutRemovedHandler(handler);
     await this.delegate.updateRequestInterception();
   }
-  async expectScreenshot(metadata, options) {
+  async expectScreenshot(progress, options) {
     const locator = options.locator;
-    const rafrafScreenshot = locator ? async (progress, timeout) => {
+    const rafrafScreenshot = locator ? async (timeout) => {
       return await locator.frame.rafrafTimeoutScreenshotElementWithProgress(progress, locator.selector, timeout, options || {});
-    } : async (progress, timeout) => {
+    } : async (timeout) => {
       await this.performActionPreChecks(progress);
-      await this.mainFrame().rafrafTimeout(timeout);
+      await this.mainFrame().rafrafTimeout(progress, timeout);
       return await this.screenshotter.screenshotPage(progress, options || {});
     };
     const comparator = (0, import_comparators.getComparator)("image/png");
-    const controller = new import_progress.ProgressController(metadata, this);
     if (!options.expected && options.isNot)
       return { errorMessage: '"not" matcher requires expected result' };
     try {
@@ -457,7 +469,7 @@ class Page extends import_instrumentation.SdkObject {
     } catch (error) {
       return { errorMessage: error.message };
     }
-    let intermediateResult = void 0;
+    let intermediateResult;
     const areEqualScreenshots = (actual, expected, previous) => {
       const comparatorResult = actual && expected ? comparator(actual, expected, options) : void 0;
       if (comparatorResult !== void 0 && !!comparatorResult === !!options.isNot)
@@ -466,26 +478,40 @@ class Page extends import_instrumentation.SdkObject {
         intermediateResult = { errorMessage: comparatorResult.errorMessage, diff: comparatorResult.diff, actual, previous };
       return false;
     };
-    const callTimeout = options.timeout;
-    return controller.run(async (progress) => {
+    const handleError = (e) => {
+      if (js.isJavaScriptErrorInEvaluate(e) || (0, import_selectorParser.isInvalidSelectorError)(e))
+        throw e;
+      let errorMessage = e.message;
+      if (e instanceof import_errors.TimeoutError && intermediateResult?.previous)
+        errorMessage = `Failed to take two consecutive stable screenshots.`;
+      return {
+        log: (0, import_callLog.compressCallLog)(e.message ? [...progress.metadata.log, e.message] : progress.metadata.log),
+        ...intermediateResult,
+        errorMessage,
+        timedOut: e instanceof import_errors.TimeoutError
+      };
+    };
+    progress.legacySetErrorHandler(handleError);
+    try {
       let actual;
       let previous;
       const pollIntervals = [0, 100, 250, 500];
-      progress.log(`${(0, import_utils.renderTitleForCall)(metadata)}${callTimeout ? ` with timeout ${callTimeout}ms` : ""}`);
+      progress.log(`${(0, import_utils.renderTitleForCall)(progress.metadata)}${options.timeout ? ` with timeout ${options.timeout}ms` : ""}`);
       if (options.expected)
         progress.log(`  verifying given screenshot expectation`);
       else
         progress.log(`  generating new stable screenshot expectation`);
       let isFirstIteration = true;
       while (true) {
-        progress.throwIfAborted();
         if (this.isClosed())
           throw new Error("The page has closed");
         const screenshotTimeout = pollIntervals.shift() ?? 1e3;
         if (screenshotTimeout)
           progress.log(`waiting ${screenshotTimeout}ms before taking screenshot`);
         previous = actual;
-        actual = await rafrafScreenshot(progress, screenshotTimeout).catch((e) => {
+        actual = await rafrafScreenshot(screenshotTimeout).catch((e) => {
+          if (this.mainFrame().isNonRetriableError(e))
+            throw e;
           progress.log(`failed to take screenshot - ` + e.message);
           return void 0;
         });
@@ -511,28 +537,14 @@ class Page extends import_instrumentation.SdkObject {
         return {};
       }
       throw new Error(intermediateResult.errorMessage);
-    }, callTimeout).catch((e) => {
-      if (js.isJavaScriptErrorInEvaluate(e) || (0, import_selectorParser.isInvalidSelectorError)(e))
-        throw e;
-      let errorMessage = e.message;
-      if (e instanceof import_errors.TimeoutError && intermediateResult?.previous)
-        errorMessage = `Failed to take two consecutive stable screenshots.`;
-      return {
-        log: (0, import_callLog.compressCallLog)(e.message ? [...metadata.log, e.message] : metadata.log),
-        ...intermediateResult,
-        errorMessage,
-        timedOut: e instanceof import_errors.TimeoutError
-      };
-    });
+    } catch (e) {
+      return handleError(e);
+    }
   }
-  async screenshot(metadata, options) {
-    const controller = new import_progress.ProgressController(metadata, this);
-    return controller.run(
-      (progress) => this.screenshotter.screenshotPage(progress, options),
-      options.timeout
-    );
+  async screenshot(progress, options) {
+    return await this.screenshotter.screenshotPage(progress, options);
   }
-  async close(metadata, options = {}) {
+  async close(options = {}) {
     if (this._closedState === "closed")
       return;
     if (options.reason)
@@ -625,9 +637,9 @@ class Page extends import_instrumentation.SdkObject {
   markAsServerSideOnly() {
     this._isServerSideOnly = true;
   }
-  async snapshotForAI(metadata) {
+  async snapshotForAI(progress) {
     this.lastSnapshotFrameIds = [];
-    const snapshot = await snapshotFrameForAI(metadata, this.mainFrame(), 0, this.lastSnapshotFrameIds);
+    const snapshot = await snapshotFrameForAI(progress, this.mainFrame(), 0, this.lastSnapshotFrameIds);
     return snapshot.join("\n");
   }
 }
@@ -713,11 +725,10 @@ class PageBinding {
   }
 }
 class InitScript {
-  constructor(source, name) {
+  constructor(source) {
     this.source = `(() => {
       ${source}
     })();`;
-    this.name = name;
   }
 }
 class FrameThrottler {
@@ -769,33 +780,30 @@ class FrameThrottler {
     }
   }
 }
-async function snapshotFrameForAI(metadata, frame, frameOrdinal, frameIds) {
-  const controller = new import_progress.ProgressController(metadata, frame);
-  const snapshot = await controller.run((progress) => {
-    return frame.retryWithProgressAndTimeouts(progress, [1e3, 2e3, 4e3, 8e3], async (continuePolling) => {
-      try {
-        const context = await frame._utilityContext();
-        const injectedScript = await context.injectedScript();
-        const snapshotOrRetry = await injectedScript.evaluate((injected, refPrefix) => {
-          const node = injected.document.body;
-          if (!node)
-            return true;
-          return injected.ariaSnapshot(node, { forAI: true, refPrefix });
-        }, frameOrdinal ? "f" + frameOrdinal : "");
-        if (snapshotOrRetry === true)
-          return continuePolling;
-        return snapshotOrRetry;
-      } catch (e) {
-        if (js.isJavaScriptErrorInEvaluate(e))
-          throw e;
+async function snapshotFrameForAI(progress, frame, frameOrdinal, frameIds) {
+  const snapshot = await frame.retryWithProgressAndTimeouts(progress, [1e3, 2e3, 4e3, 8e3], async (continuePolling) => {
+    try {
+      const context = await progress.race(frame._utilityContext());
+      const injectedScript = await progress.race(context.injectedScript());
+      const snapshotOrRetry = await progress.race(injectedScript.evaluate((injected, refPrefix) => {
+        const node = injected.document.body;
+        if (!node)
+          return true;
+        return injected.ariaSnapshot(node, { forAI: true, refPrefix });
+      }, frameOrdinal ? "f" + frameOrdinal : ""));
+      if (snapshotOrRetry === true)
         return continuePolling;
-      }
-    });
+      return snapshotOrRetry;
+    } catch (e) {
+      if (frame.isNonRetriableError(e))
+        throw e;
+      return continuePolling;
+    }
   });
   const lines = snapshot.split("\n");
   const result = [];
   for (const line of lines) {
-    const match = line.match(/^(\s*)- iframe \[ref=(.*)\]/);
+    const match = line.match(/^(\s*)- iframe (?:\[active\] )?\[ref=(.*)\]/);
     if (!match) {
       result.push(line);
       continue;
@@ -804,7 +812,7 @@ async function snapshotFrameForAI(metadata, frame, frameOrdinal, frameIds) {
     const ref = match[2];
     const frameSelector = `aria-ref=${ref} >> internal:control=enter-frame`;
     const frameBodySelector = `${frameSelector} >> body`;
-    const child = await frame.selectors.resolveFrameForSelector(frameBodySelector, { strict: true });
+    const child = await progress.race(frame.selectors.resolveFrameForSelector(frameBodySelector, { strict: true }));
     if (!child) {
       result.push(line);
       continue;
@@ -812,7 +820,7 @@ async function snapshotFrameForAI(metadata, frame, frameOrdinal, frameIds) {
     const frameOrdinal2 = frameIds.length + 1;
     frameIds.push(child.frame._id);
     try {
-      const childSnapshot = await snapshotFrameForAI(metadata, child.frame, frameOrdinal2, frameIds);
+      const childSnapshot = await snapshotFrameForAI(progress, child.frame, frameOrdinal2, frameIds);
       result.push(line + ":", ...childSnapshot.map((l) => leadingSpace + "  " + l));
     } catch {
       result.push(line);

@@ -60,14 +60,14 @@ class Android extends import_instrumentation.SdkObject {
     this._devices = /* @__PURE__ */ new Map();
     this._backend = backend;
   }
-  async devices(options) {
-    const devices = (await this._backend.devices(options)).filter((d) => d.status === "device");
+  async devices(progress, options) {
+    const devices = (await progress.race(this._backend.devices(options))).filter((d) => d.status === "device");
     const newSerials = /* @__PURE__ */ new Set();
     for (const d of devices) {
       newSerials.add(d.serial);
       if (this._devices.has(d.serial))
         continue;
-      const device = await AndroidDevice.create(this, d, options);
+      const device = await progress.raceWithCleanup(AndroidDevice.create(this, d, options), (device2) => device2.close());
       this._devices.set(d.serial, device);
     }
     for (const d of this._devices.keys()) {
@@ -93,6 +93,7 @@ class AndroidDevice extends import_instrumentation.SdkObject {
     this.model = model;
     this.serial = backend.serial;
     this._options = options;
+    this.logName = "browser";
   }
   static {
     this.Events = {
@@ -123,8 +124,8 @@ class AndroidDevice extends import_instrumentation.SdkObject {
     await this._refreshWebViews();
     return result;
   }
-  async open(command) {
-    return await this._backend.open(`${command}`);
+  async open(progress, command) {
+    return await progress.raceWithCleanup(this._backend.open(`${command}`), (socket) => socket.close());
   }
   async screenshot() {
     return await this._backend.runCommand(`shell:screencap -p`);
@@ -132,17 +133,19 @@ class AndroidDevice extends import_instrumentation.SdkObject {
   async _driver() {
     if (this._isClosed)
       return;
-    if (!this._driverPromise)
-      this._driverPromise = this._installDriver();
+    if (!this._driverPromise) {
+      const controller = new import_progress.ProgressController((0, import_instrumentation.serverSideCallMetadata)(), this);
+      this._driverPromise = controller.run((progress) => this._installDriver(progress));
+    }
     return this._driverPromise;
   }
-  async _installDriver() {
+  async _installDriver(progress) {
     (0, import_utilsBundle.debug)("pw:android")("Stopping the old driver");
-    await this.shell(`am force-stop com.microsoft.playwright.androiddriver`);
+    await progress.race(this.shell(`am force-stop com.microsoft.playwright.androiddriver`));
     if (!this._options.omitDriverInstall) {
       (0, import_utilsBundle.debug)("pw:android")("Uninstalling the old driver");
-      await this.shell(`cmd package uninstall com.microsoft.playwright.androiddriver`);
-      await this.shell(`cmd package uninstall com.microsoft.playwright.androiddriver.test`);
+      await progress.race(this.shell(`cmd package uninstall com.microsoft.playwright.androiddriver`));
+      await progress.race(this.shell(`cmd package uninstall com.microsoft.playwright.androiddriver.test`));
       (0, import_utilsBundle.debug)("pw:android")("Installing the new driver");
       const executable = import_registry.registry.findExecutable("android");
       const packageManagerCommand = (0, import_env.getPackageManagerExecCommand)();
@@ -150,14 +153,14 @@ class AndroidDevice extends import_instrumentation.SdkObject {
         const fullName = import_path.default.join(executable.directory, file);
         if (!import_fs.default.existsSync(fullName))
           throw new Error(`Please install Android driver apk using '${packageManagerCommand} playwright install android'`);
-        await this.installApk(await import_fs.default.promises.readFile(fullName));
+        await this.installApk(progress, await progress.race(import_fs.default.promises.readFile(fullName)));
       }
     } else {
       (0, import_utilsBundle.debug)("pw:android")("Skipping the driver installation");
     }
     (0, import_utilsBundle.debug)("pw:android")("Starting the new driver");
     this.shell("am instrument -w com.microsoft.playwright.androiddriver.test/androidx.test.runner.AndroidJUnitRunner").catch((e) => (0, import_utilsBundle.debug)("pw:android")(e));
-    const socket = await this._waitForLocalAbstract("playwright_android_driver_socket");
+    const socket = await this._waitForLocalAbstract(progress, "playwright_android_driver_socket");
     const transport = new import_pipeTransport.PipeTransport(socket, socket, socket, "be");
     transport.onmessage = (message) => {
       const response = JSON.parse(message);
@@ -173,14 +176,16 @@ class AndroidDevice extends import_instrumentation.SdkObject {
     };
     return transport;
   }
-  async _waitForLocalAbstract(socketName) {
+  async _waitForLocalAbstract(progress, socketName) {
     let socket;
     (0, import_utilsBundle.debug)("pw:android")(`Polling the socket localabstract:${socketName}`);
     while (!socket) {
       try {
-        socket = await this._backend.open(`localabstract:${socketName}`);
+        socket = await progress.raceWithCleanup(this._backend.open(`localabstract:${socketName}`), (socket2) => socket2.close());
       } catch (e) {
-        await new Promise((f) => setTimeout(f, 250));
+        if ((0, import_progress.isAbortError)(e))
+          throw e;
+        await progress.wait(250);
       }
     }
     (0, import_utilsBundle.debug)("pw:android")(`Connected to localabstract:${socketName}`);
@@ -220,16 +225,16 @@ class AndroidDevice extends import_instrumentation.SdkObject {
     this._android._deviceClosed(this);
     this.emit(AndroidDevice.Events.Close);
   }
-  async launchBrowser(pkg = "com.android.chrome", options) {
+  async launchBrowser(progress, pkg = "com.android.chrome", options) {
     (0, import_utilsBundle.debug)("pw:android")("Force-stopping", pkg);
     await this._backend.runCommand(`shell:am force-stop ${pkg}`);
     const socketName = (0, import_debug.isUnderTest)() ? "webview_devtools_remote_playwright_test" : "playwright_" + (0, import_crypto.createGuid)() + "_devtools_remote";
     const commandLine = this._defaultArgs(options, socketName).join(" ");
     (0, import_utilsBundle.debug)("pw:android")("Starting", pkg, commandLine);
-    await this._backend.runCommand(`shell:echo "${Buffer.from(commandLine).toString("base64")}" | base64 -d > /data/local/tmp/chrome-command-line`);
-    await this._backend.runCommand(`shell:am start -a android.intent.action.VIEW -d about:blank ${pkg}`);
-    const browserContext = await this._connectToBrowser(socketName, options);
-    await this._backend.runCommand(`shell:rm /data/local/tmp/chrome-command-line`);
+    await progress.race(this._backend.runCommand(`shell:echo "${Buffer.from(commandLine).toString("base64")}" | base64 -d > /data/local/tmp/chrome-command-line`));
+    await progress.race(this._backend.runCommand(`shell:am start -a android.intent.action.VIEW -d about:blank ${pkg}`));
+    const browserContext = await this._connectToBrowser(progress, socketName, options);
+    await progress.race(this._backend.runCommand(`shell:rm /data/local/tmp/chrome-command-line`));
     return browserContext;
   }
   _defaultArgs(options, socketName) {
@@ -259,23 +264,25 @@ class AndroidDevice extends import_instrumentation.SdkObject {
     chromeArguments.push(...args);
     return chromeArguments;
   }
-  async connectToWebView(socketName) {
+  async connectToWebView(progress, socketName) {
     const webView = this._webViews.get(socketName);
     if (!webView)
       throw new Error("WebView has been closed");
-    return await this._connectToBrowser(socketName);
+    return await this._connectToBrowser(progress, socketName);
   }
-  async _connectToBrowser(socketName, options = {}) {
-    const socket = await this._waitForLocalAbstract(socketName);
+  async _connectToBrowser(progress, socketName, options = {}) {
+    const socket = await this._waitForLocalAbstract(progress, socketName);
     const androidBrowser = new AndroidBrowser(this, socket);
-    await androidBrowser._init();
+    progress.cleanupWhenAborted(() => androidBrowser.close());
+    await progress.race(androidBrowser._init());
     this._browserConnections.add(androidBrowser);
-    const artifactsDir = await import_fs.default.promises.mkdtemp(ARTIFACTS_FOLDER);
+    const artifactsDir = await progress.race(import_fs.default.promises.mkdtemp(ARTIFACTS_FOLDER));
     const cleanupArtifactsDir = async () => {
       const errors = (await (0, import_fileUtils.removeFolders)([artifactsDir])).filter(Boolean);
       for (let i = 0; i < (errors || []).length; ++i)
         (0, import_utilsBundle.debug)("pw:android")(`exception while removing ${artifactsDir}: ${errors[i]}`);
     };
+    progress.cleanupWhenAborted(cleanupArtifactsDir);
     import_processLauncher.gracefullyCloseSet.add(cleanupArtifactsDir);
     socket.on("close", async () => {
       import_processLauncher.gracefullyCloseSet.delete(cleanupArtifactsDir);
@@ -293,48 +300,45 @@ class AndroidDevice extends import_instrumentation.SdkObject {
       proxy: options.proxy,
       protocolLogger: import_helper.helper.debugProtocolLogger(),
       browserLogsCollector: new import_debugLogger.RecentLogsCollector(),
-      originalLaunchOptions: { timeout: 0 }
+      originalLaunchOptions: {}
     };
     (0, import_browserContext.validateBrowserContextOptions)(options, browserOptions);
-    const browser = await import_crBrowser.CRBrowser.connect(this.attribution.playwright, androidBrowser, browserOptions);
-    const controller = new import_progress.ProgressController((0, import_instrumentation.serverSideCallMetadata)(), this);
+    const browser = await progress.race(import_crBrowser.CRBrowser.connect(this.attribution.playwright, androidBrowser, browserOptions));
     const defaultContext = browser._defaultContext;
-    await controller.run(async (progress) => {
-      await defaultContext._loadDefaultContextAsIs(progress);
-    });
+    await defaultContext._loadDefaultContextAsIs(progress);
     return defaultContext;
   }
   webViews() {
     return [...this._webViews.values()];
   }
-  async installApk(content, options) {
+  async installApk(progress, content, options) {
     const args = options && options.args ? options.args : ["-r", "-t", "-S"];
     (0, import_utilsBundle.debug)("pw:android")("Opening install socket");
-    const installSocket = await this._backend.open(`shell:cmd package install ${args.join(" ")} ${content.length}`);
+    const installSocket = await progress.raceWithCleanup(this._backend.open(`shell:cmd package install ${args.join(" ")} ${content.length}`), (socket) => socket.close());
     (0, import_utilsBundle.debug)("pw:android")("Writing driver bytes: " + content.length);
-    await installSocket.write(content);
-    const success = await new Promise((f) => installSocket.on("data", f));
+    await progress.race(installSocket.write(content));
+    const success = await progress.race(new Promise((f) => installSocket.on("data", f)));
     (0, import_utilsBundle.debug)("pw:android")("Written driver bytes: " + success);
     installSocket.close();
   }
-  async push(content, path2, mode = 420) {
-    const socket = await this._backend.open(`sync:`);
+  async push(progress, content, path2, mode = 420) {
+    const socket = await progress.raceWithCleanup(this._backend.open(`sync:`), (socket2) => socket2.close());
     const sendHeader = async (command, length) => {
       const buffer = Buffer.alloc(command.length + 4);
       buffer.write(command, 0);
       buffer.writeUInt32LE(length, command.length);
-      await socket.write(buffer);
+      await progress.race(socket.write(buffer));
     };
     const send = async (command, data) => {
       await sendHeader(command, data.length);
-      await socket.write(data);
+      await progress.race(socket.write(data));
     };
     await send("SEND", Buffer.from(`${path2},${mode}`));
     const maxChunk = 65535;
     for (let i = 0; i < content.length; i += maxChunk)
       await send("DATA", content.slice(i, i + maxChunk));
     await sendHeader("DONE", Date.now() / 1e3 | 0);
-    const result = await new Promise((f) => socket.once("data", f));
+    const result = await progress.race(new Promise((f) => socket.once("data", f)));
     const code = result.slice(0, 4).toString();
     if (code !== "OKAY")
       throw new Error("Could not push: " + code);

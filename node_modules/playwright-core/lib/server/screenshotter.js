@@ -166,7 +166,6 @@ class Screenshotter {
       progress.log("taking page screenshot");
       const viewportSize = await this._originalViewportSize(progress);
       await this._preparePageForScreenshot(progress, this._page.mainFrame(), options.style, options.caret !== "initial", options.animations === "disabled");
-      progress.throwIfAborted();
       if (options.fullPage) {
         const fullPageSize = await this._fullPageSize(progress);
         let documentRect = { x: 0, y: 0, width: fullPageSize.width, height: fullPageSize.height };
@@ -174,13 +173,11 @@ class Screenshotter {
         if (options.clip)
           documentRect = trimClipToSize(options.clip, documentRect);
         const buffer2 = await this._screenshot(progress, format, documentRect, void 0, fitsViewport, options);
-        progress.throwIfAborted();
         await this._restorePageAfterScreenshot();
         return buffer2;
       }
       const viewportRect = options.clip ? trimClipToSize(options.clip, viewportSize) : { x: 0, y: 0, ...viewportSize };
       const buffer = await this._screenshot(progress, format, void 0, viewportRect, true, options);
-      progress.throwIfAborted();
       await this._restorePageAfterScreenshot();
       return buffer;
     });
@@ -191,25 +188,21 @@ class Screenshotter {
       progress.log("taking element screenshot");
       const viewportSize = await this._originalViewportSize(progress);
       await this._preparePageForScreenshot(progress, handle._frame, options.style, options.caret !== "initial", options.animations === "disabled");
-      progress.throwIfAborted();
       await handle._waitAndScrollIntoViewIfNeeded(
         progress,
         true
         /* waitForVisible */
       );
-      progress.throwIfAborted();
-      const boundingBox = await handle.boundingBox();
+      const boundingBox = await progress.race(handle.boundingBox());
       (0, import_utils.assert)(boundingBox, "Node is either not visible or not an HTMLElement");
       (0, import_utils.assert)(boundingBox.width !== 0, "Node has 0 width.");
       (0, import_utils.assert)(boundingBox.height !== 0, "Node has 0 height.");
       const fitsViewport = boundingBox.width <= viewportSize.width && boundingBox.height <= viewportSize.height;
-      progress.throwIfAborted();
       const scrollOffset = await this._page.mainFrame().waitForFunctionValueInUtility(progress, () => ({ x: window.scrollX, y: window.scrollY }));
       const documentRect = { ...boundingBox };
       documentRect.x += scrollOffset.x;
       documentRect.y += scrollOffset.y;
       const buffer = await this._screenshot(progress, format, import_helper.helper.enclosingIntRect(documentRect), void 0, fitsViewport, options);
-      progress.throwIfAborted();
       await this._restorePageAfterScreenshot();
       return buffer;
     });
@@ -218,61 +211,54 @@ class Screenshotter {
     if (disableAnimations)
       progress.log("  disabled all CSS animations");
     const syncAnimations = this._page.delegate.shouldToggleStyleSheetToSyncAnimations();
-    await this._page.safeNonStallingEvaluateInAllFrames("(" + inPagePrepareForScreenshots.toString() + `)(${JSON.stringify(screenshotStyle)}, ${hideCaret}, ${disableAnimations}, ${syncAnimations})`, "utility");
+    progress.cleanupWhenAborted(() => this._restorePageAfterScreenshot());
+    await progress.race(this._page.safeNonStallingEvaluateInAllFrames("(" + inPagePrepareForScreenshots.toString() + `)(${JSON.stringify(screenshotStyle)}, ${hideCaret}, ${disableAnimations}, ${syncAnimations})`, "utility"));
     if (!process.env.PW_TEST_SCREENSHOT_NO_FONTS_READY) {
       progress.log("waiting for fonts to load...");
-      await frame.nonStallingEvaluateInExistingContext("document.fonts.ready", "utility").catch(() => {
-      });
+      await progress.race(frame.nonStallingEvaluateInExistingContext("document.fonts.ready", "utility").catch(() => {
+      }));
       progress.log("fonts loaded");
     }
-    progress.cleanupWhenAborted(() => this._restorePageAfterScreenshot());
   }
   async _restorePageAfterScreenshot() {
     await this._page.safeNonStallingEvaluateInAllFrames("window.__pwCleanupScreenshot && window.__pwCleanupScreenshot()", "utility");
   }
   async _maskElements(progress, options) {
+    if (!options.mask || !options.mask.length)
+      return () => Promise.resolve();
     const framesToParsedSelectors = new import_multimap.MultiMap();
     const cleanup = async () => {
       await Promise.all([...framesToParsedSelectors.keys()].map(async (frame) => {
         await frame.hideHighlight();
       }));
     };
-    if (!options.mask || !options.mask.length)
-      return cleanup;
-    await Promise.all((options.mask || []).map(async ({ frame, selector }) => {
+    progress.cleanupWhenAborted(cleanup);
+    await progress.race(Promise.all((options.mask || []).map(async ({ frame, selector }) => {
       const pair = await frame.selectors.resolveFrameForSelector(selector);
       if (pair)
         framesToParsedSelectors.set(pair.frame, pair.info.parsed);
-    }));
-    progress.throwIfAborted();
-    await Promise.all([...framesToParsedSelectors.keys()].map(async (frame) => {
+    })));
+    await progress.race(Promise.all([...framesToParsedSelectors.keys()].map(async (frame) => {
       await frame.maskSelectors(framesToParsedSelectors.get(frame), options.maskColor || "#F0F");
-    }));
-    progress.cleanupWhenAborted(cleanup);
+    })));
     return cleanup;
   }
   async _screenshot(progress, format, documentRect, viewportRect, fitsViewport, options) {
     if (options.__testHookBeforeScreenshot)
-      await options.__testHookBeforeScreenshot();
-    progress.throwIfAborted();
+      await progress.race(options.__testHookBeforeScreenshot());
     const shouldSetDefaultBackground = options.omitBackground && format === "png";
     if (shouldSetDefaultBackground) {
-      await this._page.delegate.setBackgroundColor({ r: 0, g: 0, b: 0, a: 0 });
       progress.cleanupWhenAborted(() => this._page.delegate.setBackgroundColor());
+      await progress.race(this._page.delegate.setBackgroundColor({ r: 0, g: 0, b: 0, a: 0 }));
     }
-    progress.throwIfAborted();
     const cleanupHighlight = await this._maskElements(progress, options);
-    progress.throwIfAborted();
     const quality = format === "jpeg" ? options.quality ?? 80 : void 0;
     const buffer = await this._page.delegate.takeScreenshot(progress, format, documentRect, viewportRect, quality, fitsViewport, options.scale || "device");
-    progress.throwIfAborted();
     await cleanupHighlight();
-    progress.throwIfAborted();
     if (shouldSetDefaultBackground)
-      await this._page.delegate.setBackgroundColor();
-    progress.throwIfAborted();
+      await progress.race(this._page.delegate.setBackgroundColor());
     if (options.__testHookAfterScreenshot)
-      await options.__testHookAfterScreenshot();
+      await progress.race(options.__testHookAfterScreenshot());
     return buffer;
   }
 }

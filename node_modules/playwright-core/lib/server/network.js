@@ -23,6 +23,7 @@ __export(network_exports, {
   Route: () => Route,
   WebSocket: () => WebSocket,
   filterCookies: () => filterCookies,
+  isLocalHostname: () => isLocalHostname,
   kMaxCookieExpiresDateInSeconds: () => kMaxCookieExpiresDateInSeconds,
   mergeHeaders: () => mergeHeaders,
   parseURL: () => parseURL,
@@ -50,12 +51,15 @@ function filterCookies(cookies, urls) {
         continue;
       if (!parsedURL.pathname.startsWith(c.path))
         continue;
-      if (parsedURL.protocol !== "https:" && parsedURL.hostname !== "localhost" && c.secure)
+      if (parsedURL.protocol !== "https:" && !isLocalHostname(parsedURL.hostname) && c.secure)
         continue;
       return true;
     }
     return false;
   });
+}
+function isLocalHostname(hostname) {
+  return hostname === "localhost" || hostname.endsWith(".localhost");
 }
 const kMaxCookieExpiresDateInSeconds = 253402300799;
 function rewriteCookies(cookies) {
@@ -240,7 +244,7 @@ class Route extends import_instrumentation.SdkObject {
     await this._delegate.abort(errorCode);
     this._endHandling();
   }
-  async redirectNavigationRequest(url) {
+  redirectNavigationRequest(url) {
     this._startHandling();
     (0, import_utils.assert)(this._request.isNavigationRequest());
     this._request.frame().redirectNavigation(url, this._request._documentId, this._request.headerValue("referer"));
@@ -598,6 +602,7 @@ function mergeHeaders(headers) {
   Route,
   WebSocket,
   filterCookies,
+  isLocalHostname,
   kMaxCookieExpiresDateInSeconds,
   mergeHeaders,
   parseURL,

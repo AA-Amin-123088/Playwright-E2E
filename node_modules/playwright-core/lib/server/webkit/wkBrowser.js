@@ -39,7 +39,7 @@ var network = __toESM(require("../network"));
 var import_wkConnection = require("./wkConnection");
 var import_wkPage = require("./wkPage");
 var import_errors = require("../errors");
-const BROWSER_VERSION = "18.5";
+const BROWSER_VERSION = "26.0";
 const DEFAULT_USER_AGENT = `Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/${BROWSER_VERSION} Safari/605.1.15`;
 class WKBrowser extends import_browser.Browser {
   constructor(parent, transport, options) {
@@ -152,8 +152,8 @@ class WKBrowser extends import_browser.Browser {
     const wkPage = this._wkPages.get(pageProxyId);
     if (!wkPage)
       return;
-    wkPage.didClose();
     this._wkPages.delete(pageProxyId);
+    wkPage.didClose();
   }
   _onPageProxyMessageReceived(event) {
     const wkPage = this._wkPages.get(event.pageProxyId);
@@ -199,7 +199,7 @@ class WKBrowserContext extends import_browserContext.BrowserContext {
     if (this._options.geolocation)
       promises.push(this.setGeolocation(this._options.geolocation));
     if (this._options.offline)
-      promises.push(this.setOffline(this._options.offline));
+      promises.push(this.doUpdateOffline());
     if (this._options.httpCredentials)
       promises.push(this.setHTTPCredentials(this._options.httpCredentials));
     await Promise.all(promises);
@@ -220,18 +220,36 @@ class WKBrowserContext extends import_browserContext.BrowserContext {
   async doGetCookies(urls) {
     const { cookies } = await this._browser._browserSession.send("Playwright.getAllCookies", { browserContextId: this._browserContextId });
     return network.filterCookies(cookies.map((c) => {
-      const copy = { ...c };
-      copy.expires = c.expires === -1 ? -1 : c.expires / 1e3;
-      delete copy.session;
+      const { name, value, domain, path, expires, httpOnly, secure, sameSite } = c;
+      const copy = {
+        name,
+        value,
+        domain,
+        path,
+        expires: expires === -1 ? -1 : expires / 1e3,
+        httpOnly,
+        secure,
+        sameSite
+      };
       return copy;
     }), urls);
   }
   async addCookies(cookies) {
-    const cc = network.rewriteCookies(cookies).map((c) => ({
-      ...c,
-      session: c.expires === -1 || c.expires === void 0,
-      expires: c.expires && c.expires !== -1 ? c.expires * 1e3 : c.expires
-    }));
+    const cc = network.rewriteCookies(cookies).map((c) => {
+      const { name, value, domain, path, expires, httpOnly, secure, sameSite } = c;
+      const copy = {
+        name,
+        value,
+        domain,
+        path,
+        expires: expires && expires !== -1 ? expires * 1e3 : expires,
+        httpOnly,
+        secure,
+        sameSite,
+        session: expires === -1 || expires === void 0
+      };
+      return copy;
+    });
     await this._browser._browserSession.send("Playwright.setCookies", { cookies: cc, browserContextId: this._browserContextId });
   }
   async doClearCookies() {
@@ -249,8 +267,7 @@ class WKBrowserContext extends import_browserContext.BrowserContext {
     const payload = geolocation ? { ...geolocation, timestamp: Date.now() } : void 0;
     await this._browser._browserSession.send("Playwright.setGeolocationOverride", { browserContextId: this._browserContextId, geolocation: payload });
   }
-  async setExtraHTTPHeaders(headers) {
-    this._options.extraHTTPHeaders = headers;
+  async doUpdateExtraHTTPHeaders() {
     for (const page of this.pages())
       await page.delegate.updateExtraHTTPHeaders();
   }
@@ -259,8 +276,7 @@ class WKBrowserContext extends import_browserContext.BrowserContext {
     for (const page of this.pages())
       await page.delegate.updateUserAgent();
   }
-  async setOffline(offline) {
-    this._options.offline = offline;
+  async doUpdateOffline() {
     for (const page of this.pages())
       await page.delegate.updateOffline();
   }
@@ -280,6 +296,10 @@ class WKBrowserContext extends import_browserContext.BrowserContext {
   async doUpdateRequestInterception() {
     for (const page of this.pages())
       await page.delegate.updateRequestInterception();
+  }
+  async doUpdateDefaultViewport() {
+  }
+  async doUpdateDefaultEmulatedMedia() {
   }
   async doExposePlaywrightBinding() {
     for (const page of this.pages())
