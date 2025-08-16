@@ -1,0 +1,4 @@
+{
+  error: 'Missing API key.',
+  how_to_get_one: 'https://reqres.in/signup'
+}
