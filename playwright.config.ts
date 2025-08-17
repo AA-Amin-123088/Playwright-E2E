@@ -38,7 +38,10 @@ module.exports = defineConfig({
     /* Collect trace when retrying the failed test. See https://playwright.dev/docs/trace-viewer */
     
     storageState: 'auth.json',
-    baseURL: '',
+    baseURL: 'https://restful-booker.herokuapp.com',
+    extraHTTPHeaders:{
+      Accept:"application/json"
+    },
     headless:true,
     video:'retain-on-failure',
     /* Collect trace when retrying the failed test. See https://playwright.dev/docs/trace-viewer */

@@ -21,50 +21,79 @@ test.describe.serial('TEST CASE 1-Validate registration using valid data:-', asy
     });
 });
 
-
-test.describe('API Testing with Playwright', () => {
-  let apiContext: APIRequestContext;
-
-  test.beforeAll(async ({ playwright }) => {
-    // Create API request context
-    apiContext = await request.newContext({
-      baseURL: 'https://jsonplaceholder.typicode.com',
-    });
-  });
-
-  test('GET request - fetch a post', async () => {
-    const response = await apiContext.get('/posts/1');
-    expect(response.ok()).toBeTruthy();
-    const body = await response.json();
-    expect(body).toHaveProperty('id', 1);
-  });
-
-  test('POST request - create a post', async () => {
-    const newPost = {
-      title: 'foo',
-      body: 'bar',
-      userId: 1,
-    };
-
-    const response = await apiContext.post('/posts', {
-      data: newPost,
-    });
-
-    expect(response.status()).toBe(201);
-    const responseBody = await response.json();
-    expect(responseBody).toMatchObject(newPost);
-  });
-
-  test.afterAll(async () => {
-    await apiContext.dispose();
+let reqContext2: APIRequestContext;
+test.beforeAll("Before all the test", async () => {
+  reqContext2 = await request.newContext({
+    baseURL: "https://restful-booker.herokuapp.com",
+    extraHTTPHeaders:{
+      Accept:"application/json"
+    }
   });
 });
 
+test('Practice-1',async ({request}) => {
+  const resp1=await request.get("https://restful-booker.herokuapp.com/booking",{
+    headers:{
+      Accept:"application/json"
+    }
+  });
+  console.log(await resp1.json());
+});
+test('Practice-2',async () => {
+  const reqContext=await request.newContext({
+    baseURL:"https://restful-booker.herokuapp.com",
+    extraHTTPHeaders:{
+      Accept:"application/json"
+    }
+  });
+  const resp2=await reqContext.get("/booking");
+  console.log(await resp2.json());
+});
+test("Practice-3", async () => {
+  const resp3 = await reqContext2.get("/booking/25");
+  console.log(await resp3.json());
+  expect(resp3.status()).toBe(200);
+  expect(await resp3.json()).toMatchObject(
+    {
+  firstname: 'Josh',
+  lastname: 'Allen',
+  totalprice: 111,
+  depositpaid: true,
+  bookingdates: { checkin: '2018-01-01', checkout: '2019-01-01' },
+  additionalneeds: 'midnight snack'
+    }
+)
+});
+test("Practice-4", async ({request}) => {
+  const resp4 = await request.get("/booking/641");
+  console.log(await resp4.json());
+});
+test("Practice-5", async ({request}) => {
+  const resp5 = await request.get("/booking?firstname=Jim&lastname=Brown");
+  console.log(await resp5.json());
+});
+test("Practice-6", async ({request}) => {
+  const resp6 = await request.get("/booking",{
+    params:{
+      firstname:"Josh",
+      lastname:"Allen"
+    }
+  });
+  console.log(await resp6.json());
 
-test('API Get Request', async({request}) => {
-  const response=await request.get('https://reqres.in/api/users/2');
-  // expect(response.status()).toBe(200);
-  // const text=await response.text();
-  // expect(text).toContain('John')
-  console.log(await response.json());
+});
+
+test("Practice-Post-7", async ({request}) => {
+  const resp7 = await request.post("/booking",{
+    data:{
+      firstname: 'Jim11',
+      lastname: 'brown11',
+      totalprice: 11111,
+      depositpaid: true,
+      bookingdates: { checkin: '2018-11-11', checkout: '2019-11-11' },
+      additionalneeds: 'midnight snack111'
+    }
+  });
+  const jsonResponse1=await resp7.json();
+  console.log(jsonResponse1);
 });
