@@ -1,0 +1,150 @@
+# Page snapshot
+
+```yaml
+- complementary:
+  - navigation "Sidepanel":
+    - link "client brand banner":
+      - /url: https://www.orangehrm.com/
+      - img "client brand banner"
+    - textbox "Search"
+    - button ""
+    - separator
+    - list:
+      - listitem:
+        - link "Admin":
+          - /url: /web/index.php/admin/viewAdminModule
+      - listitem:
+        - link "PIM":
+          - /url: /web/index.php/pim/viewPimModule
+      - listitem:
+        - link "Leave":
+          - /url: /web/index.php/leave/viewLeaveModule
+      - listitem:
+        - link "Time":
+          - /url: /web/index.php/time/viewTimeModule
+      - listitem:
+        - link "Recruitment":
+          - /url: /web/index.php/recruitment/viewRecruitmentModule
+      - listitem:
+        - link "My Info":
+          - /url: /web/index.php/pim/viewMyDetails
+      - listitem:
+        - link "Performance":
+          - /url: /web/index.php/performance/viewPerformanceModule
+      - listitem:
+        - link "Dashboard":
+          - /url: /web/index.php/dashboard/index
+      - listitem:
+        - link "Directory":
+          - /url: /web/index.php/directory/viewDirectory
+      - listitem:
+        - link "Maintenance":
+          - /url: /web/index.php/maintenance/viewMaintenanceModule
+      - listitem:
+        - link "Claim":
+          - /url: /web/index.php/claim/viewClaimModule
+          - img
+          - text: Claim
+      - listitem:
+        - link "Buzz":
+          - /url: /web/index.php/buzz/viewBuzz
+- banner:
+  - heading "PIM" [level=6]
+  - link "Upgrade":
+    - /url: https://orangehrm.com/open-source/upgrade-to-advanced
+    - button "Upgrade"
+  - list:
+    - listitem:
+      - img "profile picture"
+      - paragraph: Nezuko Kamado
+      - text: 
+  - navigation "Topbar Menu":
+    - list:
+      - button ""
+- heading "Nezuko Kamado" [level=6]
+- img "profile picture"
+- tablist:
+  - tab "Personal Details":
+    - link "Personal Details":
+      - /url: /web/index.php/pim/viewPersonalDetails/empNumber/7
+  - tab "Contact Details":
+    - link "Contact Details":
+      - /url: /web/index.php/pim/contactDetails/empNumber/7
+  - tab "Emergency Contacts":
+    - link "Emergency Contacts":
+      - /url: /web/index.php/pim/viewEmergencyContacts/empNumber/7
+  - tab "Dependents":
+    - link "Dependents":
+      - /url: /web/index.php/pim/viewDependents/empNumber/7
+  - tab "Immigration":
+    - link "Immigration":
+      - /url: /web/index.php/pim/viewImmigration/empNumber/7
+  - tab "Job":
+    - link "Job":
+      - /url: /web/index.php/pim/viewJobDetails/empNumber/7
+  - tab "Salary":
+    - link "Salary":
+      - /url: /web/index.php/pim/viewSalaryList/empNumber/7
+  - tab "Report-to":
+    - link "Report-to":
+      - /url: /web/index.php/pim/viewReportToDetails/empNumber/7
+  - tab "Qualifications":
+    - link "Qualifications":
+      - /url: /web/index.php/pim/viewQualifications/empNumber/7
+  - tab "Memberships":
+    - link "Memberships":
+      - /url: /web/index.php/pim/viewMemberships/empNumber/7
+- heading "Personal Details" [level=6]
+- separator
+- text: Employee Full Name*
+- textbox "First Name": Nezuko
+- textbox "Middle Name"
+- textbox "Last Name": Kamado
+- separator
+- text: Employee Id
+- textbox: "090912"
+- text: Other Id
+- textbox
+- text: Driver's License Number
+- textbox: ABC123
+- text: License Expiry Date
+- textbox "yyyy-dd-mm": 2023-18-10
+- text: 
+- separator
+- text: Nationality Indian  Marital Status Single  Date of Birth
+- textbox "yyyy-dd-mm": 1999-08-04
+- text:  Gender
+- radio "Male"
+- text: Male
+- radio "Female" [checked]
+- text: Female
+- separator
+- paragraph: "* Required"
+- button "Save"
+- separator
+- heading "Custom Fields" [level=6]
+- separator
+- text: Blood Type A+  Test_Field
+- textbox: "445"
+- separator
+- button "Save"
+- separator
+- heading "Add Attachment" [level=6]
+- separator
+- text: Select File*
+- button "Choose File"
+- text: Browse No file selected 
+- paragraph: Accepts up to 1MB
+- text: Comment
+- textbox "Type comment here"
+- separator
+- paragraph: "* Required"
+- button "Cancel"
+- button "Save"
+- paragraph: OrangeHRM OS 5.7
+- paragraph:
+  - text: © 2005 - 2025
+  - link "OrangeHRM, Inc":
+    - /url: http://www.orangehrm.com
+  - text: . All rights reserved.
+```
