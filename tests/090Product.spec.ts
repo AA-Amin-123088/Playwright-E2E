@@ -22,7 +22,6 @@ test.describe('Sauce Demo Tests with Session', () => {
     await delay(8000);
   });
 
-
 });
 // update
 // update

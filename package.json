@@ -18,7 +18,7 @@
     "@playwright/test": "^1.54.1",
     "@types/jest": "^29.5.14",
     "@types/node": "^22.10.2",
-    "allure-commandline": "^2.32.0",
+    "allure-commandline": "^2.34.1",
     "allure-playwright": "^3.3.3",
     "playwright": "^1.49.1",
     "typescript": "^5.7.3"
