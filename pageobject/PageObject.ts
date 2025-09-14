@@ -10,6 +10,5 @@ export class PageObject{
         this.homeObj = new HomeLocator(page);
         this.productObj=new ProductLocator(page);
         this.youtubeObj=new YouTubeLocator(page);
-    }
-    
+    }    
 }
