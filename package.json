@@ -1,0 +1,26 @@
+{
+  "name": "playrighte2e",
+  "version": "1.0.0",
+  "main": "index.js",
+  "scripts": {
+    "test:specific": "npx playwright test --headed --project=chromium 003Product.spec.ts",
+    "test:parallel": "npx playwright test --workers=4",
+    "test:all:script": "npx playwright test --headed --workers=1",
+    "report:generate": "npx allure generate allure-results --clean",
+    "report:open": "npx allure open"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "description": "",
+  "devDependencies": {
+    "@faker-js/faker": "^9.3.0",
+    "@playwright/test": "^1.55.0",
+    "@types/jest": "^29.5.14",
+    "@types/node": "^22.10.2",
+    "allure-commandline": "^2.34.1",
+    "allure-playwright": "^3.3.3",
+    "playwright": "^1.49.1",
+    "typescript": "^5.7.3"
+  }
+}
