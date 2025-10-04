@@ -9,7 +9,7 @@ test.describe('Sauce Demo Tests with Session', () => {
     await page.goto('https://www.saucedemo.com/inventory.html');
   });
   test.afterEach(async ({page}) => {
-    await delay(5000);
+    await delay(2000);
     await page.close();
   });
 
