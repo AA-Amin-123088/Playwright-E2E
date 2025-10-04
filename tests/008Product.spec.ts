@@ -1,7 +1,7 @@
 import { Actions } from "../pageobject/Actions";
 import { DashboardPage } from "../pages/DashboardPage";
 import { test } from '@playwright/test';
-import * as config from '../config'
+import * as config from '../config';
 const actions=new Actions();
 
 test.beforeEach(async( {page}) => {
