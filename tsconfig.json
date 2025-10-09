@@ -32,5 +32,5 @@
 // Last Stage for Manager :
 // git checkout main_branch
 // git pull origin main_branch
-// git merge feature_branch
+// git merge origin/feature_branch
 // git push -u origin main_branch
