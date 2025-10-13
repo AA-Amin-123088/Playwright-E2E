@@ -1,6 +1,7 @@
 // import globalSetup from "./global-setup";
 
 
+
 // @ts-check
 const { defineConfig, devices } = require('@playwright/test');
 
@@ -37,11 +38,13 @@ module.exports = defineConfig({
     // baseURL: 'http://127.0.0.1:3000',
     /* Collect trace when retrying the failed test. See https://playwright.dev/docs/trace-viewer */
     
-    storageState: 'auth.json',
-    baseURL: 'https://restful-booker.herokuapp.com',
-    extraHTTPHeaders:{
-      Accept:"application/json"
-    },
+    storageState: `auth.json`,
+    baseURL: "",
+    //API Testing purpose
+    // baseURL: 'https://restful-booker.herokuapp.com',
+    // extraHTTPHeaders:{
+    //   Accept:"application/json"
+    // },
     headless:true,
     video:'retain-on-failure',
     /* Collect trace when retrying the failed test. See https://playwright.dev/docs/trace-viewer */
