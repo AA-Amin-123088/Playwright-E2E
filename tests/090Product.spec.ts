@@ -6,7 +6,7 @@ const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 test.describe('Sauce Demo Tests with Session', () => {
 
   test.beforeEach(async ({ page }) => {
-    await page.goto('https://www.saucedemo.com/inventory.html');
+    await page.goto('/inventory.html');
   });
   test.afterEach(async ({page}) => {
     await delay(2000);

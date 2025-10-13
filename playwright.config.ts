@@ -1,6 +1,3 @@
-// import globalSetup from "./global-setup";
-
-
 
 // @ts-check
 const { defineConfig, devices } = require('@playwright/test');
@@ -17,7 +14,7 @@ const { defineConfig, devices } = require('@playwright/test');
 module.exports = defineConfig({
   
   testDir: './tests',
-  globalSetup: './global-setup',
+  globalSetup: './utils/global-setup',
   /* Run tests in files in parallel */
   fullyParallel: false,
 
@@ -39,7 +36,8 @@ module.exports = defineConfig({
     /* Collect trace when retrying the failed test. See https://playwright.dev/docs/trace-viewer */
     
     storageState: `auth.json`,
-    baseURL: "",
+    baseURL: "https://www.saucedemo.com/",
+    
     //API Testing purpose
     // baseURL: 'https://restful-booker.herokuapp.com',
     // extraHTTPHeaders:{
