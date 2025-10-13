@@ -15,13 +15,13 @@
 // git add . 
 // git commit -m "message"
 // git branch -M main
-// git remote add origin "url "
+// git remote add origin "url"
 // git remote set-url origin "url"
 // git push -u origin main
 // git fetch origin or --all 
 // git branch 
 // git status 
-// git clone url 
+// git clone "url"
 // git checkout branch
 // git checkout -b new_branch
 // git push -u origin new_branch
