@@ -1,5 +1,5 @@
-import { test, request, expect, chromium, Page, APIRequestContext } from '@playwright/test';
-const delay = (ms: number | undefined) => new Promise(resolve => setTimeout(resolve, ms));
+// import { test, request, expect, chromium, Page, APIRequestContext } from '@playwright/test';
+// const delay = (ms: number | undefined) => new Promise(resolve => setTimeout(resolve, ms));
 
 // test.describe.serial('TEST CASE 1-Validate registration using valid data:-', async () => {
 //   let page: Page;

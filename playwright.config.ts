@@ -1,6 +1,6 @@
 
 // @ts-check
-const { defineConfig, devices } = require('@playwright/test');
+import { defineConfig, devices } from '@playwright/test';
 
 /**
  * Read environment variables from file.
@@ -37,7 +37,7 @@ module.exports = defineConfig({
     
     storageState: `auth.json`,
     baseURL: "https://www.saucedemo.com/",
-    
+
     //API Testing purpose
     // baseURL: 'https://restful-booker.herokuapp.com',
     // extraHTTPHeaders:{
