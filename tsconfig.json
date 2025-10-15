@@ -34,3 +34,6 @@
 // git pull origin main_branch
 // git merge origin/feature_branch
 // git push -u origin main_branch
+
+// npm install rimraf --save-dev
+// $env:ENV="prod"; npx playwright test --headed
