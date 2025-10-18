@@ -8,8 +8,8 @@ test.describe('Sauce Demo Tests with Session', () => {
   test.beforeEach(async ({ page }) => {
     await page.goto('/inventory.html');
   });
+  
   test.afterEach(async ({page}) => {
-    await delay(2000);
     await page.close();
   });
 
