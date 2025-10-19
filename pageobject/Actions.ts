@@ -1,6 +1,7 @@
 import { expect, Page } from '@playwright/test';
 
 export class Actions {
+    
     async clickElement(page: Page, locator: string) {
         try {
             await page.locator(locator).click();
