@@ -14,7 +14,7 @@ import { defineConfig, devices } from '@playwright/test';
 module.exports = defineConfig({
   
   testDir: './tests',
-  globalSetup: './utils/global-setup',
+  globalSetup: './global-setup',
   /* Run tests in files in parallel */
   fullyParallel: false,
 
