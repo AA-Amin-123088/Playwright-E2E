@@ -1,6 +1,6 @@
 // tests/sauce-demo.spec.ts
-import { test, expect } from '@playwright/test';
-
+import { test } from '@playwright/test';
+import { custom_method } from '../utils/Commands';
 const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
 test.describe('Sauce Demo Tests with Session', () => {
@@ -15,10 +15,16 @@ test.describe('Sauce Demo Tests with Session', () => {
 
   test('Test Case 1: Verify Feature Items', async ({ page }) => {
     await page.locator("//div[normalize-space()='Sauce Labs Fleece Jacket']").click();
+    await delay(5000);
   });
 
   test('Test Case 2: Scroll to Bottom', async ({ page }) => {
     await page.locator("//div[normalize-space()='Sauce Labs Onesie']").click();
+    await delay(5000);
+  });
+  test('Test Case 3: Scroll to Bottom', async ({ page }) => {
+    await custom_method(page);
+    await delay(5000);
   });
 
 });
