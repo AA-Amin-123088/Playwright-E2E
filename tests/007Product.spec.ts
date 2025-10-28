@@ -89,6 +89,7 @@ const test_data=JSON.parse(JSON.stringify(require("../testdata/testdata.json")))
               await expect(errorMessage).toHaveText(user_data.expected);
           }
       }
+      await page.close();
   });
 
   // test('file upload test automation', async({page}) => {
