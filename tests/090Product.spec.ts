@@ -1,6 +1,6 @@
 // tests/sauce-demo.spec.ts
 import { test } from '@playwright/test';
-import { custom_method } from '../utils/Commands';
+import { customMethod } from '../utils/Commands';
 const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
 test.describe('Sauce Demo Tests with Session', () => {
@@ -23,7 +23,7 @@ test.describe('Sauce Demo Tests with Session', () => {
     await delay(5000);
   });
   test('Test Case 3: Scroll to Bottom', async ({ page }) => {
-    await custom_method(page);
+    await customMethod(page);
     await delay(5000);
   });
 
