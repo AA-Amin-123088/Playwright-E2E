@@ -1,6 +1,6 @@
 // tests/sauce-demo.spec.ts
 import { test } from '@playwright/test';
-import { customMethod } from '../utils/Commands';
+import { customMethod } from '../utils/CustomCommands';
 const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
 test.describe('Sauce Demo Tests with Session', () => {

@@ -4,7 +4,7 @@ const delay = (ms: number | undefined) => new Promise(resolve => setTimeout(reso
 import { faker } from '@faker-js/faker';
 const randomEmail = faker.internet.email();
 import { PageObject } from '../pageobject/PageObject';
-import { clearInput } from '../utils/Commands';
+import { clearInput } from '../utils/CustomCommands';
 test.describe('test2222', () => {
   test.beforeEach(async({page}) => {
     await page.goto(config.PageUrl001);
