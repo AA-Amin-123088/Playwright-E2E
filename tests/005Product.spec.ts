@@ -1,25 +1,36 @@
-// import { test, request, expect, chromium, Page, APIRequestContext } from '@playwright/test';
-// const delay = (ms: number | undefined) => new Promise(resolve => setTimeout(resolve, ms));
-
-// test.describe.serial('TEST CASE 1-Validate registration using valid data:-', async () => {
-//   let page: Page;
-//   test.beforeAll("Browser is open without fixture",async()=>{
-//       test.setTimeout(60000);
-//       const browser=await chromium.launch();
-//       const context=await browser.newContext();
-//       page=await context.newPage();
-//   })
-//   test.afterAll("Browser is closed without fixture",async()=>{
-//       page.close();
-//   })
-//   test('Open current browser and disable notifications', async () => {
-//       await page.goto("https://www.nop-station.com/");
-//     });
-//   test('Hover the item and click register button', async () => {
-//       await page.click("//body/div[@class='master-wrapper-page']/div[@class='header']/div[@class='container']/div[@class='header-lower']/div[@class='header-links-wrapper']/div[@class='header-links']/ul/li[@class='user-dropdown-menu']/a[1]");
-//       await page.waitForTimeout(5000);
-//     });
-// });
+import { test, request, expect, chromium, Page, APIRequestContext } from '@playwright/test';
+import * as config from "../config";
+import { PageObject } from '../pageobject/PageObject';
+import { faker } from '@faker-js/faker';
+const randomEmail = faker.internet.email();
+test.describe.serial('TEST CASE 1-Validate registration using valid data:-', async () => {
+  let page: Page;
+  test.beforeAll("Browser is open without fixture",async()=>{
+      test.setTimeout(60000);
+      const browser=await chromium.launch();
+      const context=await browser.newContext();
+      page=await context.newPage();
+  })
+  test.afterAll("Browser is closed without fixture",async()=>{
+      page.close();
+  })
+  test('Open current browser and disable notifications', async () => {
+    const ObjectManager=new PageObject(page);
+    await page.goto(config.PageUrl001);
+    await expect(ObjectManager.homeObj.home_text_header()).toHaveText("Home");
+    await ObjectManager.homeObj.product_link().click();
+    await ObjectManager.homeObj.add_to_cart_button().click();
+    await ObjectManager.homeObj.view_cart_link().click();
+    });
+  test('Hover the item and click register button', async () => {
+    const ObjectManager=new PageObject(page);
+    await ObjectManager.homeObj.proceed_to_checkout_button().click();
+    await ObjectManager.homeObj.register_login_button().click();
+    await ObjectManager.homeObj.name_input_field().fill("tania");
+    await ObjectManager.homeObj.email_address_input_field().fill(randomEmail);
+    await ObjectManager.homeObj.sign_up_button().click();
+    });
+});
 
 // let reqContext2: APIRequestContext;
 // test.beforeAll("Before all the test", async () => {
