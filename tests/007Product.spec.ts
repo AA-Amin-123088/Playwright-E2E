@@ -62,16 +62,15 @@ import { faker } from '@faker-js/faker';
 //   console.log("Unlocking account...");
 // }
 
-const test_data=JSON.parse(JSON.stringify(require("../testdata/testdata.json")));
+// const test_data=JSON.parse(JSON.stringify(require("../testdata/testdata.json")));
 
-
-  test('Login with valid credentials',async({page}) => {
-    await page.goto("https://demo.applitools.com/index.html");
-    await page.locator("//input[@id='username']").fill(test_data.user.username);
-    await page.locator("//input[@id='password']").fill(test_data.user.password);
-    await page.locator("//a[@id='log-in']").click();
-    await page.close();  
-  });
+//   test('Login with valid credentials',async({page}) => {
+//     await page.goto("https://demo.applitools.com/index.html");
+//     await page.locator("//input[@id='username']").fill(test_data.user.username);
+//     await page.locator("//input[@id='password']").fill(test_data.user.password);
+//     await page.locator("//a[@id='log-in']").click();
+//     await page.close();  
+//   });
   
 //   test('data driven test automation', async ({ page }) => {
 //       const data = require('../testdata/orange_hrm.json');
