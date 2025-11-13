@@ -3,6 +3,7 @@ import { HomeLocator } from "../pages/HomePage";
 import ProductLocator from "../pages/ProductPage";
 import YouTubeLocator from "../pages/YouTube";
 export class PageObject{
+    
     homeObj:HomeLocator;
     productObj:ProductLocator;
     youtubeObj:YouTubeLocator;
@@ -10,5 +11,6 @@ export class PageObject{
         this.homeObj = new HomeLocator(page);
         this.productObj=new ProductLocator(page);
         this.youtubeObj=new YouTubeLocator(page);
-    }    
+    }
+
 }
