@@ -6,7 +6,6 @@ const randomEmail = faker.internet.email();
 test.describe.serial('TEST CASE 1-Validate registration using valid data:-', async () => {
   let page: Page;
   test.beforeAll("Browser is open without fixture",async()=>{
-      test.setTimeout(60000);
       const browser=await chromium.launch();
       const context=await browser.newContext();
       page=await context.newPage();
