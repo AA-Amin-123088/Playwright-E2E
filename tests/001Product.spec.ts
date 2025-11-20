@@ -10,7 +10,6 @@ test.describe('test2222', () => {
     await page.goto(config.PageUrl001);
   });
   test.afterEach(async ({page})=>{
-    await delay(5000);
     await page.close();
   });
   test('Add Product E2E Test1',async({page}) => {
