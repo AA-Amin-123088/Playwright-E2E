@@ -1,6 +1,6 @@
-import { test, expect, chromium, Page } from '@playwright/test';
-const delay = (ms: number | undefined) => new Promise(resolve => setTimeout(resolve, ms));
-import { faker } from '@faker-js/faker';
+// import { test, expect, chromium, Page } from '@playwright/test';
+// const delay = (ms: number | undefined) => new Promise(resolve => setTimeout(resolve, ms));
+// import { faker } from '@faker-js/faker';
 // const users_data=[
 //   ["Al-Amin","Alhmed",faker.internet.email()],
 //   ["Sumon","Alhmed",faker.internet.email()],
