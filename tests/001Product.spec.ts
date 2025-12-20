@@ -24,7 +24,7 @@ test.describe('test2222', () => {
     await ObjectManager.homeObj.email_address_input_field().fill(randomEmail);
     await ObjectManager.homeObj.sign_up_button().click();
   });
-    test('Add Product E2E Test2',async({page}) => {
+  test('Add Product E2E Test2',async({page}) => {
     const ObjectManager=new PageObject(page);
     await expect(ObjectManager.homeObj.home_text_header()).toHaveText("Home");
     await ObjectManager.homeObj.product_link().click();
