@@ -28,4 +28,4 @@ test.describe('Sauce Demo Tests with Session', () => {
     await delay(5000);
   });
 
-});
+})
