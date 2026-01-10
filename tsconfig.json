@@ -37,3 +37,5 @@
 
 // npm install rimraf --save-dev
 // $env:ENV="prod"; npx playwright test --headed
+
+//npx playwright test --project=chromium 090Product.spec.ts

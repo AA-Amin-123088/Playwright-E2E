@@ -30,7 +30,7 @@ stages:
             displayName: "Install Playwright browsers"
 
           - script: |
-              npx playwright test --project=chromium 090Product.spec.ts
+              npx playwright test
             displayName: "Run Playwright tests"
 
 

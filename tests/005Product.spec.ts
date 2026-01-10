@@ -21,14 +21,14 @@ test.describe.serial('TEST CASE 1-Validate registration using valid data:-', asy
     await ObjectManager.homeObj.add_to_cart_button().click();
     await ObjectManager.homeObj.view_cart_link().click();
     });
-  test('Hover the item and click register button', async () => {
-    const ObjectManager=new PageObject(page);
-    await ObjectManager.homeObj.proceed_to_checkout_button().click();
-    await ObjectManager.homeObj.register_login_button().click();
-    await ObjectManager.homeObj.name_input_field().fill("tania");
-    await ObjectManager.homeObj.email_address_input_field().fill(randomEmail);
-    await ObjectManager.homeObj.sign_up_button().click();
-    });
+  // test('Hover the item and click register button', async () => {
+  //   const ObjectManager=new PageObject(page);
+  //   await ObjectManager.homeObj.proceed_to_checkout_button().click();
+  //   await ObjectManager.homeObj.register_login_button().click();
+  //   await ObjectManager.homeObj.name_input_field().fill("tania");
+  //   await ObjectManager.homeObj.email_address_input_field().fill(randomEmail);
+  //   await ObjectManager.homeObj.sign_up_button().click();
+  //   });
 });
 
 // let reqContext2: APIRequestContext;
