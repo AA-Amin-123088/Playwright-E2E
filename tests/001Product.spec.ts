@@ -1,5 +1,4 @@
 import { test, expect } from '@playwright/test';
-import * as config from "../config";
 const delay = (ms: number | undefined) => new Promise(resolve => setTimeout(resolve, ms));
 import { faker } from '@faker-js/faker';
 const randomEmail = faker.internet.email();
@@ -7,7 +6,7 @@ import { PageObject } from '../pageobject/PageObject';
 import { clearAndTypeInput } from '../utils/CustomCommands';
 test.describe('test2222', () => {
   test.beforeEach(async({page}) => {
-    await page.goto(config.PageUrl001);
+    await page.goto("https://automationexercise.com/");
   });
   test.afterEach(async ({page})=>{
     await page.close();
