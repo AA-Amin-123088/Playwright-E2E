@@ -7,6 +7,7 @@ test.describe('Sauce Demo Tests with Session', () => {
 
   test.beforeEach(async ({ page }) => {
     await page.goto('/inventory.html',{waitUntil:'domcontentloaded'});
+    await delay(2000);
   });
   
   test.afterEach(async ({page}) => {
@@ -15,17 +16,17 @@ test.describe('Sauce Demo Tests with Session', () => {
 
   test('Test Case 1: Verify Feature Items', async ({ page }) => {
     await page.locator("//div[normalize-space()='Sauce Labs Fleece Jacket']").click();
-    await delay(5000);
+    await delay(3000);
   });
 
   test('Test Case 2: Scroll to Bottom', async ({ page }) => {
     await page.locator("//div[normalize-space()='Sauce Labs Onesie']").click();
-    await delay(5000);
+    await delay(3000);
   });
   
   test('Test Case 3: Scroll to Bottom', async ({ page }) => {
     await customMethod(page);
-    await delay(5000);
+    await delay(3000);
   });
 
 })
