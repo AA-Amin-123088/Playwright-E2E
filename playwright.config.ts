@@ -35,7 +35,7 @@ module.exports = defineConfig({
     // baseURL: 'http://127.0.0.1:3000',
     /* Collect trace when retrying the failed test. See https://playwright.dev/docs/trace-viewer */
     
-    storageState: 'session/login-state.json',
+    storageState: 'session/login-auth.json',
     baseURL: "https://www.saucedemo.com/",
 
     //API Testing purpose

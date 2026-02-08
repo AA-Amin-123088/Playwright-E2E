@@ -12,6 +12,6 @@ async function globalSetup(config: FullConfig) {
   await page.fill("//input[@id='password']", 'secret_sauce');
   await page.click("//input[@id='login-button']");
   await delay(2000);
-  await page.context().storageState({ path: `session/login-state.json` });
+  await page.context().storageState({ path: `session/login-auth.json` });
 }
 export default globalSetup;
