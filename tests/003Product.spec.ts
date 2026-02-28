@@ -4,7 +4,7 @@ import { faker } from '@faker-js/faker';
 const randomEmail = faker.internet.email();
 test('Add Product E2E Test',async({page}) => {
   await page.goto('https://automationexercise.com/');
-  await expect(page.locator("//a[normalize-space()='Home']")).toHaveText("Home")
+  await expect(page.locator("//a[normalize-space()='Home']")).toHaveText("Home");
   await page.locator("//div[@class='col-sm-9 padding-right']//div[2]//div[1]//div[2]//ul[1]//li[1]//a[1]").click();
   await page.locator("//button[normalize-space()='Add to cart']").click();
   await page.locator("//u[normalize-space()='View Cart']").click();
