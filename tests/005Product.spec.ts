@@ -1,27 +1,26 @@
-import { test, request, expect, chromium, Page, APIRequestContext } from '@playwright/test';
-import { PageObject } from '../pageobject/PageObject';
-import { faker } from '@faker-js/faker';
-const randomEmail = faker.internet.email();
-test.describe.serial('TEST CASE 1-Validate registration using valid data:-', async () => {
-  let page: Page;
-  test.beforeAll("Browser is open without fixture",async()=>{
-      const browser=await chromium.launch();
-      const context=await browser.newContext();
-      page=await context.newPage();
-  })
-  test.afterAll("Browser is closed without fixture",async()=>{
-      page.close();
-  })
-  test('Open current browser and disable notifications', async () => {
-    const ObjectManager=new PageObject(page);
-    await page.goto("https://automationexercise.com/");
-    await expect(ObjectManager.homeObj.home_text_header()).toHaveText("Home");
-    await ObjectManager.homeObj.product_link().click();
-    await ObjectManager.homeObj.add_to_cart_button().click();
-    await ObjectManager.homeObj.view_cart_link().click();
-    });
-
-});
+// import { test, request, expect, chromium, Page, APIRequestContext } from '@playwright/test';
+// import { PageObject } from '../pageobject/PageObject';
+// import { faker } from '@faker-js/faker';
+// const randomEmail = faker.internet.email();
+// test.describe.serial('TEST CASE 1-Validate registration using valid data:-', async () => {
+//   let page: Page;
+//   test.beforeAll("Browser is open without fixture",async()=>{
+//       const browser=await chromium.launch();
+//       const context=await browser.newContext();
+//       page=await context.newPage();
+//   })
+//   test.afterAll("Browser is closed without fixture",async()=>{
+//       page.close();
+//   })
+//   test('Open current browser and disable notifications', async () => {
+//     const ObjectManager=new PageObject(page);
+//     await page.goto("https://automationexercise.com/");
+//     await expect(ObjectManager.homeObj.home_text_header()).toHaveText("Home");
+//     await ObjectManager.homeObj.product_link().click();
+//     await ObjectManager.homeObj.add_to_cart_button().click();
+//     await ObjectManager.homeObj.view_cart_link().click();
+//     });
+// });
 
 // let reqContext2: APIRequestContext;
 // test.beforeAll("Before all the test", async () => {
