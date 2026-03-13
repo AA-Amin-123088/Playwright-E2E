@@ -11,7 +11,7 @@ test.describe('test2222', () => {
   test.afterEach(async ({page})=>{
     await page.close();
   });
-  test('Add Product E2E Test',async({page}) => {
+  test('Login and Product E2E Test',async({page}) => {
     const ObjectManager=new PageObject(page);
     await expect(ObjectManager.homeObj.home_text_header()).toHaveText("Home");
     await ObjectManager.homeObj.product_link().click();
@@ -21,7 +21,9 @@ test.describe('test2222', () => {
     await ObjectManager.homeObj.register_login_button().click();
     await ObjectManager.homeObj.name_input_field().fill("tania");
     await ObjectManager.homeObj.email_address_input_field().fill(randomEmail);
+    await delay(3000);
     await clearAndTypeInput(ObjectManager.homeObj.email_address_input_field(),randomEmail);
+    await delay(3000);
   });
 });
 
