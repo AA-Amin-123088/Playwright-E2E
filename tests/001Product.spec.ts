@@ -22,7 +22,7 @@ test.describe('test2222', () => {
     await ObjectManager.homeObj.name_input_field().fill("tania");
     await ObjectManager.homeObj.email_address_input_field().fill(randomEmail);
     await delay(3000);
-    await clearAndTypeInput(ObjectManager.homeObj.email_address_input_field(),randomEmail);
+    await clearAndTypeInput(ObjectManager.homeObj.email_address_input_field(),1+randomEmail);
     await delay(3000);
   });
 });
