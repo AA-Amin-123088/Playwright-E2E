@@ -1,14 +1,15 @@
 {
-    "compilerOptions": {
-      "target": "ESNext",
-      "module": "NodeNext",
-      "strict": true,
-      "moduleResolution": "Node16",
-      "esModuleInterop": true,
-      "outDir": "dist",
-      "skipLibCheck": true
-    },
-    "include": ["playwright.config.ts", "**/*.ts"]
+  "compilerOptions": {
+    "target": "ESNext",
+    "module": "NodeNext",
+    "strict": true,
+    "moduleResolution": "NodeNext",
+    "esModuleInterop": true,
+    "outDir": "dist",
+    "skipLibCheck": true,
+    "types": ["node"]
+  },
+  "include": ["playwright.config.ts", "**/*.ts"]
 }
 
 // git init 
