@@ -1,9 +1,9 @@
 {
     "compilerOptions": {
       "target": "ESNext",
-      "module": "CommonJS",
+      "module": "NodeNext",
       "strict": true,
-      "moduleResolution": "Node",
+      "moduleResolution": "Node16",
       "esModuleInterop": true,
       "outDir": "dist",
       "skipLibCheck": true
