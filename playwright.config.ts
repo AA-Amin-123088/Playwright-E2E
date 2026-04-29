@@ -7,12 +7,7 @@ import { defineConfig, devices } from '@playwright/test';
  * https://github.com/motdotla/dotenv
  */
 // require('dotenv').config({ path: path.resolve(__dirname, '.env') });
-import * as dotenv from 'dotenv';
-import path from 'path';
-// Get environment variable from CLI or default to dev
-const ENV = process.env.ENV || 'dev';
-// Load corresponding .env file
-dotenv.config({ path: path.resolve(__dirname, `./env/${ENV}.env`) });
+
 
 /**
  * @see https://playwright.dev/docs/test-configuration
@@ -41,8 +36,8 @@ module.exports = defineConfig({
     // baseURL: 'http://127.0.0.1:3000',
     /* Collect trace when retrying the failed test. See https://playwright.dev/docs/trace-viewer */
     
-    storageState: `session/${ENV}-state.json`,
-    baseURL: process.env.BASE_URL,
+    storageState: `session/login-state.json`,
+    baseURL: 'https://www.saucedemo.com/',
 
     //API Testing purpose
     // baseURL: 'https://restful-booker.herokuapp.com',
