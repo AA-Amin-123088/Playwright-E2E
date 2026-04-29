@@ -1,27 +1,22 @@
-// import { test, expect } from '@playwright/test';
-// const delay = (ms: number | undefined) => new Promise(resolve => setTimeout(resolve, ms));
-// import { faker } from '@faker-js/faker';
-// const randomEmail = faker.internet.email();
-// import { PageObject } from '../pageobject/PageObject';
-// import { clearAndTypeInput } from '../utils/CustomCommands';
-// test.describe('test2222', () => {
-//   test.beforeEach(async({page}) => {
-//     await page.goto("https://automationexercise.com/login");
-//   });
-//   test.afterEach(async ({page})=>{
-//     await page.close();
-//   });
-//   test('Login and Product E2E Test',async({page}) => {
-//     const ObjectManager=new PageObject(page);
-//     await ObjectManager.homeObj.name_input_field().fill("tania");
-//     await ObjectManager.homeObj.email_address_input_field().fill(randomEmail);
-//     await delay(3000);
-//     await clearAndTypeInput(ObjectManager.homeObj.email_address_input_field(),1+randomEmail);
-//     await delay(3000);
-//   });
-// });
-
-
-
-
-
+import { test, expect } from '@playwright/test';
+const delay = (ms: number | undefined) => new Promise(resolve => setTimeout(resolve, ms));
+import { PageObject } from '../pageobject/PageObject';
+test('Product list count :::',async({page}) => {
+  await page.goto("https://www.saucedemo.com/");
+  const ObjectManager=new PageObject(page);
+  await ObjectManager.productObj.username_input_field().fill("standard_user");
+  await ObjectManager.productObj.password_input_field().fill("secret_sauce");
+  await ObjectManager.productObj.login_button().click();
+  const product_count=await ObjectManager.productObj.product_list().count();
+  console.log(product_count);
+  expect(await ObjectManager.productObj.product_list().count()).toEqual(6);
+  for(let i=0;i<product_count;i++){
+    const productName = await ObjectManager.productObj.product_list().nth(i).textContent();
+    console.log(`Product ${i+1}: ${productName}`);
+  }
+  await delay(2000);
+  const productNames = await ObjectManager.productObj.product_list().allTextContents();
+  console.log(productNames);
+  await delay(2000);
+  await page.close();
+});
