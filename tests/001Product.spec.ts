@@ -2,7 +2,7 @@ import { test, expect } from '@playwright/test';
 const delay = (ms: number | undefined) => new Promise(resolve => setTimeout(resolve, ms));
 import { PageObject } from '../pageobject/PageObject';
 test('Product list count :::',async({page}) => {
-  await page.goto("https://www.saucedemo.com/");
+  await page.goto("/");
   const ObjectManager=new PageObject(page);
   await ObjectManager.productObj.username_input_field().fill("standard_user");
   await ObjectManager.productObj.password_input_field().fill("secret_sauce");
