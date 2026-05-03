@@ -1,5 +1,6 @@
 import { Page } from '@playwright/test';
 export default class YouTubeLocator{
+    
     private page: Page;
 
     constructor(page: Page) {
