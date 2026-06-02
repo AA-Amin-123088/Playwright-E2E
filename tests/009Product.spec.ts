@@ -10,7 +10,7 @@ test.describe('Sauce Demo Tests with Session', () => {
     await delay(2000);
   });
   
-  test.afterAll(async ({page}) => {
+  test.afterEach(async ({page}) => {
     await page.close();
   });
 
